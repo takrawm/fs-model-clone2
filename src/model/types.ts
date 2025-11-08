@@ -214,3 +214,15 @@ export interface BinaryOpNode {
   left: ExpressionNode;
   right: ExpressionNode;
 }
+
+/**
+ * 科目ID
+ *
+ * 勘定科目を一意に識別するためのIDです。
+ * 例: "revenue", "cogs", "gross_profit"
+ *
+ * NodeIdと区別するために型エイリアスを使用しています。
+ * NodeIdはASTノードの内部管理用ID、AccountIdは
+ * ユーザーが扱う財務科目のIDです。
+ */
+export type AccountId = string;

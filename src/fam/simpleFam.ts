@@ -2,7 +2,7 @@
 
 import { evalTopo, makeFF, makeTT } from "../engine/ast.ts";
 import { NodeRegistry } from "../model/registry.ts";
-import type { ExpressionNode, Op } from "../model/types.ts";
+import type { AccountId, ExpressionNode, NodeId, Op } from "../model/types.ts";
 
 /**
  * 簡素版FAM（Financial Analysis Model）
@@ -29,16 +29,16 @@ export class SimpleFAM {
   private registry: NodeRegistry = new NodeRegistry();
 
   // 実績データ（前期の数値）を保持
-  private actuals: Record<string, number> = {};
+  private actuals: Record<AccountId, number> = {};
 
   // 計算ルールを保持
-  private rules: Record<string, Rule> = {};
+  private rules: Record<AccountId, Rule> = {};
 
   // 各科目に対応するASTノードのIDを保持
-  private accountNodes: Map<string, string> = new Map();
+  private accountNodes: Map<AccountId, NodeId> = new Map();
 
   // 循環参照を検出するための訪問済み集合
-  private visiting: Set<string> = new Set();
+  private visiting: Set<AccountId> = new Set();
 
   /**
    * 実績データを読み込みます
@@ -48,7 +48,7 @@ export class SimpleFAM {
    *
    * これらの値は、前期参照が必要な計算式の基礎となります。
    */
-  loadActuals(actuals: Record<string, number>) {
+  loadActuals(actuals: Record<AccountId, number>) {
     this.actuals = { ...actuals };
     console.log(
       "実績データを読み込みました:",
@@ -66,7 +66,7 @@ export class SimpleFAM {
    * - INPUT: 固定値を設定（例：次期の単価を1050円に設定）
    * - CALCULATION: 計算式を定義（例：売上 = 単価 × 数量）
    */
-  setRules(rules: Record<string, Rule>) {
+  setRules(rules: Record<AccountId, Rule>) {
     this.rules = { ...rules };
     console.log("計算ルールを設定しました:", Object.keys(rules).length, "件");
   }
@@ -84,12 +84,12 @@ export class SimpleFAM {
    *
    * @returns 計算結果のオブジェクト（科目ID → 予測値）
    */
-  compute(): Record<string, number> {
+  compute(): Record<AccountId, number> {
     console.log("\n予測計算を開始します...");
 
     // すべてのルールに対してASTノードを構築
-    const rootNodes: string[] = [];
-    for (const accountId of Object.keys(this.rules)) {
+    const rootNodes: NodeId[] = [];
+    for (const accountId of Object.keys(this.rules) as AccountId[]) {
       const nodeId = this.buildNode(accountId);
       rootNodes.push(nodeId);
     }
@@ -101,8 +101,8 @@ export class SimpleFAM {
     console.log("計算を完了しました");
 
     // 結果を科目ID → 値のマップに変換
-    const forecast: Record<string, number> = {};
-    for (const accountId of Object.keys(this.rules)) {
+    const forecast: Record<AccountId, number> = {};
+    for (const accountId of Object.keys(this.rules) as AccountId[]) {
       const nodeId = this.accountNodes.get(accountId);
       if (nodeId) {
         const value = results.get(nodeId);
@@ -131,7 +131,7 @@ export class SimpleFAM {
    * @param accountId - 構築する科目のID
    * @returns 構築されたASTノードのID
    */
-  private buildNode(accountId: string): string {
+  private buildNode(accountId: AccountId): NodeId {
     // 既に構築済みの場合は、そのノードIDを返す
     if (this.accountNodes.has(accountId)) {
       return this.accountNodes.get(accountId)!;
@@ -149,7 +149,7 @@ export class SimpleFAM {
       throw new Error(`ルールが見つかりません: ${accountId}`);
     }
 
-    let nodeId: string;
+    let nodeId: NodeId;
 
     switch (rule.type) {
       case "INPUT": {
@@ -172,8 +172,107 @@ export class SimpleFAM {
         break;
       }
 
+      case "REFERENCE": {
+        const expr: ExpressionNode = {
+          type: "ACCOUNT",
+          id: rule.ref,
+        };
+        nodeId = this.buildExpression(accountId, expr);
+        console.log(`  ${accountId}: REFERENCE -> ${rule.ref}`);
+        break;
+      }
+
+      case "GROWTH_RATE": {
+        const expr: ExpressionNode = {
+          type: "MUL",
+          left: {
+            type: "ACCOUNT",
+            id: rule.ref,
+            period: "PREV",
+          },
+          right: {
+            type: "NUMBER",
+            value: 1 + rule.rate,
+          },
+        };
+        nodeId = this.buildExpression(accountId, expr);
+        console.log(
+          `  ${accountId}: GROWTH_RATE -> ${rule.ref} * (1 + ${rule.rate})`
+        );
+        break;
+      }
+
+      case "PERCENTAGE": {
+        const expr: ExpressionNode = {
+          type: "MUL",
+          left: {
+            type: "ACCOUNT",
+            id: rule.ref,
+          },
+          right: {
+            type: "NUMBER",
+            value: rule.percentage,
+          },
+        };
+        nodeId = this.buildExpression(accountId, expr);
+        console.log(
+          `  ${accountId}: PERCENTAGE -> ${rule.ref} * ${rule.percentage}`
+        );
+        break;
+      }
+
+      case "BALANCE_CHANGE": {
+        const flows = rule.flows;
+        if (!flows.length) {
+          nodeId = this.buildExpression(accountId, {
+            type: "NUMBER",
+            value: 0,
+          });
+          console.log(`  ${accountId}: BALANCE_CHANGE -> empty`);
+          break;
+        }
+
+        const expr = flows.reduce<ExpressionNode | null>((acc, flow) => {
+          const baseNode: ExpressionNode = {
+            type: "ACCOUNT",
+            id: flow.ref,
+          };
+
+          const signedNode =
+            flow.sign === "PLUS"
+              ? baseNode
+              : ({
+                  type: "MUL",
+                  left: baseNode,
+                  right: { type: "NUMBER", value: -1 },
+                } as ExpressionNode);
+
+          if (!acc) return signedNode;
+
+          return {
+            type: "ADD",
+            left: acc,
+            right: signedNode,
+          };
+        }, null);
+
+        nodeId = this.buildExpression(
+          accountId,
+          expr ?? {
+            type: "NUMBER",
+            value: 0,
+          }
+        );
+        console.log(
+          `  ${accountId}: BALANCE_CHANGE -> flows=${flows
+            .map((f) => `${f.sign === "PLUS" ? "+" : "-"}${f.ref}`)
+            .join(" ")}`
+        );
+        break;
+      }
+
       default: {
-        throw new Error(`未対応のルールタイプ: ${(rule as any).type}`);
+        return assertNeverExpression(rule, accountId);
       }
     }
 
@@ -272,8 +371,7 @@ export class SimpleFAM {
       }
 
       default: {
-        const _exhaustive: never = expr;
-        throw new Error(`未対応の式タイプ: ${(expr as any).type}`);
+        return assertNeverExpression(expr, contextId);
       }
     }
   }
@@ -300,6 +398,12 @@ export class SimpleFAM {
   }
 }
 
+function assertNeverExpression(expr: never, contextId: string): never {
+  throw new Error(
+    `未対応の式タイプ: ${(expr as any).type} (context: ${contextId})`
+  );
+}
+
 /**
  * ルールの型定義
  *
@@ -308,4 +412,14 @@ export class SimpleFAM {
  */
 type Rule =
   | { type: "INPUT"; value: number }
-  | { type: "CALCULATION"; expression: ExpressionNode };
+  | { type: "CALCULATION"; expression: ExpressionNode }
+  | { type: "GROWTH_RATE"; rate: number; ref: AccountId }
+  | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
+  | { type: "REFERENCE"; ref: AccountId }
+  | {
+      type: "BALANCE_CHANGE";
+      flows: Array<{
+        ref: AccountId;
+        sign: "PLUS" | "MINUS";
+      }>;
+    };
