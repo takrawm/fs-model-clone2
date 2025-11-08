@@ -30,8 +30,12 @@ printKPI("販売数量", forecastValues.quantity, "個");
 printMoney("売上高", forecastValues.revenue);
 printMoney("売上原価", forecastValues.cogs);
 printMoney("売上総利益", forecastValues.gross_profit);
-printMoney("販管費", forecastValues.opex);
+printMoney("減価償却費", forecastValues.depreciation);
+printMoney("その他販管費", forecastValues.other_opex);
+printMoney("販管費合計", forecastValues.total_opex);
 printMoney("営業利益", forecastValues.operating_profit);
+printMoney("法人税等", forecastValues.income_tax);
+printMoney("当期純利益", forecastValues.net_income);
 
 console.log(`\n=== ${previousPeriodId} 実績 vs ${forecastPeriodId} 予測 ===`);
 printComparison("売上高", actualPrevious.revenue, forecastValues.revenue);
@@ -39,6 +43,16 @@ printComparison(
   "営業利益",
   actualPrevious.operating_profit,
   forecastValues.operating_profit
+);
+printComparison(
+  "法人税等",
+  actualPrevious.income_tax,
+  forecastValues.income_tax
+);
+printComparison(
+  "当期純利益",
+  actualPrevious.net_income,
+  forecastValues.net_income
 );
 
 // デバッグ用：AST構造を表示（コメント解除で確認可能）

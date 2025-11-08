@@ -2,12 +2,14 @@ import type { AccountId, Rule } from "../model/types.ts";
 
 export const forecastRules: Record<AccountId, Rule> = {
   unit_price: {
-    type: "INPUT",
-    value: 1050,
+    type: "GROWTH_RATE",
+    rate: 0.1,
+    ref: "unit_price",
   },
   quantity: {
-    type: "INPUT",
-    value: 550,
+    type: "GROWTH_RATE",
+    rate: 0.1,
+    ref: "quantity",
   },
   revenue: {
     type: "CALCULATION",
@@ -18,12 +20,9 @@ export const forecastRules: Record<AccountId, Rule> = {
     },
   },
   cogs: {
-    type: "CALCULATION",
-    expression: {
-      type: "MUL",
-      left: { type: "ACCOUNT", id: "revenue" satisfies AccountId },
-      right: { type: "NUMBER", value: 0.6 },
-    },
+    type: "PERCENTAGE",
+    percentage: 0.6,
+    ref: "revenue" satisfies AccountId,
   },
   gross_profit: {
     type: "CALCULATION",
@@ -33,16 +32,45 @@ export const forecastRules: Record<AccountId, Rule> = {
       right: { type: "ACCOUNT", id: "cogs" satisfies AccountId },
     },
   },
-  opex: {
+  depreciation: {
+    type: "PERCENTAGE",
+    percentage: 0.1,
+    ref: "cogs" satisfies AccountId,
+  },
+  other_opex: {
     type: "INPUT",
-    value: 80000,
+    value: 70000,
+  },
+  total_opex: {
+    type: "CALCULATION",
+    expression: {
+      type: "ADD",
+      left: { type: "ACCOUNT", id: "depreciation" satisfies AccountId },
+      right: { type: "ACCOUNT", id: "other_opex" satisfies AccountId },
+    },
   },
   operating_profit: {
     type: "CALCULATION",
     expression: {
       type: "SUB",
       left: { type: "ACCOUNT", id: "gross_profit" satisfies AccountId },
-      right: { type: "ACCOUNT", id: "opex" satisfies AccountId },
+      right: { type: "ACCOUNT", id: "total_opex" satisfies AccountId },
+    },
+  },
+  income_tax: {
+    type: "CALCULATION",
+    expression: {
+      type: "MUL",
+      left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
+      right: { type: "NUMBER", value: 0.3 },
+    },
+  },
+  net_income: {
+    type: "CALCULATION",
+    expression: {
+      type: "SUB",
+      left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
+      right: { type: "ACCOUNT", id: "income_tax" satisfies AccountId },
     },
   },
 };

@@ -240,6 +240,7 @@ export interface Account {
   AccountName: string;
   GlobalAccountID?: string | null;
   fs_type?: FsType | null;
+  parent_id?: AccountId | null;
 }
 
 export type PeriodId = string;
