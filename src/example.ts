@@ -14,30 +14,31 @@ fam.setPeriods(seedPeriods);
 fam.loadActuals(seedActualValues);
 fam.setRules(forecastRules);
 
-// FY2025 の予測を実行（FY2023/FY2024はシード実績として取り込み済み）
-const targetPeriods = ["FY2025"];
-const forecast = fam.compute(targetPeriods);
-const forecastFY2025 = forecast["FY2025"];
+// 既存期間の次年度を自動生成して予測
+const forecastResult = fam.compute();
+const [forecastPeriodId] = Object.keys(forecastResult);
+const forecastValues = forecastResult[forecastPeriodId]!;
 
-// 比較用に FY2024 実績を取得
-const actualFY2024 = periodValues("FY2024");
+// 比較用に直近年度の実績を取得（予測年度の1年前）
+const previousPeriodId = decrementFiscalYear(forecastPeriodId);
+const actualPrevious = periodValues(previousPeriodId);
 
 // 結果表示
-console.log("\n=== FY2025 予測結果 ===");
-printKPI("商品単価", forecastFY2025.unit_price, "円");
-printKPI("販売数量", forecastFY2025.quantity, "個");
-printMoney("売上高", forecastFY2025.revenue);
-printMoney("売上原価", forecastFY2025.cogs);
-printMoney("売上総利益", forecastFY2025.gross_profit);
-printMoney("販管費", forecastFY2025.opex);
-printMoney("営業利益", forecastFY2025.operating_profit);
+console.log(`\n=== ${forecastPeriodId} 予測結果 ===`);
+printKPI("商品単価", forecastValues.unit_price, "円");
+printKPI("販売数量", forecastValues.quantity, "個");
+printMoney("売上高", forecastValues.revenue);
+printMoney("売上原価", forecastValues.cogs);
+printMoney("売上総利益", forecastValues.gross_profit);
+printMoney("販管費", forecastValues.opex);
+printMoney("営業利益", forecastValues.operating_profit);
 
-console.log("\n=== FY2024 実績 vs FY2025 予測 ===");
-printComparison("売上高", actualFY2024.revenue, forecastFY2025.revenue);
+console.log(`\n=== ${previousPeriodId} 実績 vs ${forecastPeriodId} 予測 ===`);
+printComparison("売上高", actualPrevious.revenue, forecastValues.revenue);
 printComparison(
   "営業利益",
-  actualFY2024.operating_profit,
-  forecastFY2025.operating_profit
+  actualPrevious.operating_profit,
+  forecastValues.operating_profit
 );
 
 // デバッグ用：AST構造を表示（コメント解除で確認可能）
@@ -71,4 +72,12 @@ function printComparison(
   console.log(
     `${label}: ${actual.toLocaleString()}円 → ${forecastValue.toLocaleString()}円 (+${diffRate}%)`
   );
+}
+
+function decrementFiscalYear(periodId: string): string {
+  const match = periodId.match(/^(.*?)(\d+)$/);
+  if (!match) return periodId;
+  const [, prefix, numberPart] = match;
+  const nextNumber = Math.max(Number(numberPart) - 1, 0);
+  return `${prefix}${nextNumber}`;
 }

@@ -63,11 +63,12 @@ export class SimpleFAM {
    * アカウントマスタを設定します
    */
   setAccounts(accounts: Account[]) {
+    // 既存のエントリを全て削除
     this.accounts.clear();
     for (const account of accounts) {
       this.accounts.set(account.id, account);
     }
-    console.log("アカウントを設定しました:", accounts.length, "件");
+    console.log("アカウントを設定しました:", this.accounts);
   }
 
   /**
@@ -93,6 +94,7 @@ export class SimpleFAM {
     for (const item of values) {
       this.ensureAccountById(item.accountId);
       this.ensurePeriodById(item.periodId);
+      // `${periodId}::${accountId}`返す
       const key = this.valueKey(item.periodId, item.accountId);
       this.actualValues.set(key, item.value);
     }
@@ -116,53 +118,42 @@ export class SimpleFAM {
   /**
    * 予測計算を実行します
    *
-   * このメソッドは、設定されたルールに基づいて次期の数値を計算します。
-   * 内部的には、以下の手順で処理が行われます：
+   * 現在登録されている期間のうち最も新しい期間の翌年度を自動生成し、
+   * その期間の値をルールに従って計算します。
    *
-   * 1. 各科目のASTノードを構築（buildNodeメソッド）
-   * 2. 依存関係を解決してトポロジカルソート
-   * 3. ソートされた順序で各ノードを評価
-   * 4. 結果を返す
-   *
-   * @returns 計算結果のオブジェクト（科目ID → 予測値）
+   * 新たに生成された期間IDをキーに持つ結果オブジェクトを返します。
    */
-  compute(
-    targetPeriodIds?: PeriodId[]
-  ): Record<PeriodId, Record<AccountId, number>> {
+  compute(): Record<PeriodId, Record<AccountId, number>> {
     if (!this.periods.length) throw new Error("期間が設定されていません");
     if (!Object.keys(this.rules).length)
       throw new Error("ルールが設定されていません");
 
-    const requestedPeriods = (
-      targetPeriodIds ?? this.periods.map((p) => p.id)
-    ).map((id) => this.ensurePeriodById(id).id);
-    const orderedPeriodIds = requestedPeriods
-      .map((id) => ({ id, index: this.getPeriodIndex(id) }))
-      .sort((a, b) => a.index - b.index)
-      .map(({ id }) => id);
+    const latestPeriod = this.periods[this.periods.length - 1];
+    const nextPeriod = this.createNextPeriod(latestPeriod);
+    this.periods.push(nextPeriod);
+    this.periodIndexById.set(nextPeriod.id, this.periods.length - 1);
 
     this.registry = new NodeRegistry();
     this.accountNodes.clear();
     this.visiting.clear();
-    this.forecastValues.clear();
 
     console.log("\n予測計算を開始します...");
 
-    const output: Record<PeriodId, Record<AccountId, number>> = {};
+    const output: Record<PeriodId, Record<AccountId, number>> = {
+      [nextPeriod.id]: {},
+    };
 
-    for (const periodId of orderedPeriodIds) {
-      const period = this.ensurePeriodById(periodId);
-      console.log(`  - 期間 ${periodId} の計算を開始 (${period.label ?? ""})`);
-      output[periodId] = {};
+    console.log(
+      `  - 期間 ${nextPeriod.id} の計算を開始 (${nextPeriod.label ?? ""})`
+    );
 
-      for (const accountId of Object.keys(this.rules) as AccountId[]) {
-        const nodeId = this.buildNode(periodId, accountId);
-        const result = evalTopo(this.registry, [nodeId]);
-        const value = result.get(nodeId) ?? 0;
-        this.setForecastValue(periodId, accountId, value);
-        output[periodId][accountId] = Math.round(value);
-        console.log(`    > ${accountId}@${periodId} = ${value.toFixed(2)}`);
-      }
+    for (const accountId of Object.keys(this.rules) as AccountId[]) {
+      const nodeId = this.buildNode(nextPeriod.id, accountId);
+      const result = evalTopo(this.registry, [nodeId]);
+      const value = result.get(nodeId) ?? 0;
+      this.setForecastValue(nextPeriod.id, accountId, value);
+      output[nextPeriod.id][accountId] = Math.round(value);
+      console.log(`    > ${accountId}@${nextPeriod.id} = ${value.toFixed(2)}`);
     }
 
     console.log("予測計算を完了しました");
@@ -203,6 +194,18 @@ export class SimpleFAM {
         this.registry,
         actualValue,
         `${accountLabel}@${periodLabel}[Actual]`
+      );
+      this.accountNodes.set(key, nodeId);
+      this.visiting.delete(key);
+      return nodeId;
+    }
+
+    const cachedForecast = this.forecastValues.get(key);
+    if (cachedForecast != null) {
+      const nodeId = makeFF(
+        this.registry,
+        cachedForecast,
+        `${accountLabel}@${periodLabel}[Forecast~cached]`
       );
       this.accountNodes.set(key, nodeId);
       this.visiting.delete(key);
@@ -443,6 +446,24 @@ export class SimpleFAM {
     value: number
   ) {
     this.forecastValues.set(this.valueKey(periodId, accountId), value);
+  }
+
+  private createNextPeriod(latest: TimelinePeriod): TimelinePeriod {
+    const nextId = this.incrementPeriodId(latest.id);
+    const baseOffset = latest.offset ?? this.getPeriodIndex(latest.id);
+    return {
+      id: nextId,
+      label: nextId,
+      offset: baseOffset + 1,
+    };
+  }
+
+  private incrementPeriodId(currentId: PeriodId): PeriodId {
+    const match = currentId.match(/^(.*?)(\d+)$/);
+    if (!match) return `${currentId}_next`;
+    const [, prefix, numberPart] = match;
+    const nextNumber = String(Number(numberPart) + 1);
+    return `${prefix}${nextNumber}`;
   }
 
   /**

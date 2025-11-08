@@ -250,6 +250,10 @@ export interface TimelinePeriod {
   offset?: number;
 }
 
+export interface ComputeOptions {
+  periodsToGenerate?: number;
+}
+
 export type ValueSource = "ACTUAL" | "FORECAST";
 
 export interface Value {
