@@ -34,6 +34,8 @@ export type NodeId = string;
  */
 export type Op = "ADD" | "SUB" | "MUL" | "DIV";
 
+export type FsType = "PL" | "BS" | "CF" | "PP&E" | "OTHER";
+
 /**
  * ASTノード
  *
@@ -160,10 +162,16 @@ export interface NumberNode {
  *   right: { type: 'NUMBER', value: 1.1 }
  * }
  */
+export type PeriodReference =
+  | "CURRENT"
+  | "PREV"
+  | PeriodId
+  | { offset: number };
+
 export interface AccountNode {
   type: "ACCOUNT";
-  id: string;
-  period?: "CURRENT" | "PREV";
+  id: AccountId;
+  period?: PeriodReference;
 }
 
 /**
@@ -226,3 +234,52 @@ export interface BinaryOpNode {
  * ユーザーが扱う財務科目のIDです。
  */
 export type AccountId = string;
+
+export interface Account {
+  id: AccountId;
+  AccountName: string;
+  GlobalAccountID?: string | null;
+  fs_type?: FsType | null;
+}
+
+export type PeriodId = string;
+
+export interface TimelinePeriod {
+  id: PeriodId;
+  label?: string;
+  offset?: number;
+}
+
+export type ValueSource = "ACTUAL" | "FORECAST";
+
+export interface Value {
+  accountId: AccountId;
+  periodId: PeriodId;
+  value: number;
+  source?: ValueSource;
+}
+
+/**
+ * FAMルールの定義
+ *
+ * 財務モデルで各科目をどのように計算するかを表す設定です。
+ * - INPUT: 固定値を使う
+ * - CALCULATION: 構造化された式を評価する
+ * - GROWTH_RATE: 前期値に成長率を掛ける
+ * - PERCENTAGE: 参照科目に割合を掛ける
+ * - REFERENCE: 単純参照（当期/前期は式側で指定）
+ * - BALANCE_CHANGE: 複数科目の増減を合算する
+ */
+export type Rule =
+  | { type: "INPUT"; value: number }
+  | { type: "CALCULATION"; expression: ExpressionNode }
+  | { type: "GROWTH_RATE"; rate: number; ref: AccountId }
+  | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
+  | { type: "REFERENCE"; ref: AccountId }
+  | {
+      type: "BALANCE_CHANGE";
+      flows: Array<{
+        ref: AccountId;
+        sign: "PLUS" | "MINUS";
+      }>;
+    };

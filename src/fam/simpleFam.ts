@@ -2,7 +2,18 @@
 
 import { evalTopo, makeFF, makeTT } from "../engine/ast.ts";
 import { NodeRegistry } from "../model/registry.ts";
-import type { AccountId, ExpressionNode, NodeId, Op } from "../model/types.ts";
+import type {
+  Account,
+  AccountId,
+  ExpressionNode,
+  NodeId,
+  Op,
+  PeriodId,
+  PeriodReference,
+  Rule,
+  TimelinePeriod,
+  Value,
+} from "../model/types.ts";
 
 /**
  * 簡素版FAM（Financial Analysis Model）
@@ -28,33 +39,64 @@ export class SimpleFAM {
   // ASTノードを管理するレジストリ
   private registry: NodeRegistry = new NodeRegistry();
 
-  // 実績データ（前期の数値）を保持
-  private actuals: Record<AccountId, number> = {};
+  // アカウントマスタ
+  private accounts: Map<AccountId, Account> = new Map();
+
+  // 期間の定義とインデックス
+  private periods: TimelinePeriod[] = [];
+  private periodIndexById: Map<PeriodId, number> = new Map();
+
+  // 実績値と予測値
+  private actualValues: Map<string, number> = new Map();
+  private forecastValues: Map<string, number> = new Map();
 
   // 計算ルールを保持
   private rules: Record<AccountId, Rule> = {};
 
-  // 各科目に対応するASTノードのIDを保持
-  private accountNodes: Map<AccountId, NodeId> = new Map();
+  // 各科目×期間に対応するASTノードID
+  private accountNodes: Map<string, NodeId> = new Map();
 
-  // 循環参照を検出するための訪問済み集合
-  private visiting: Set<AccountId> = new Set();
+  // 循環参照検出用
+  private visiting: Set<string> = new Set();
+
+  /**
+   * アカウントマスタを設定します
+   */
+  setAccounts(accounts: Account[]) {
+    this.accounts.clear();
+    for (const account of accounts) {
+      this.accounts.set(account.id, account);
+    }
+    console.log("アカウントを設定しました:", accounts.length, "件");
+  }
+
+  /**
+   * 期間情報を設定します
+   */
+  setPeriods(periods: TimelinePeriod[]) {
+    this.periods = periods.slice();
+    this.periodIndexById.clear();
+    for (let i = 0; i < this.periods.length; i += 1) {
+      const period = this.periods[i];
+      this.periodIndexById.set(period.id, i);
+    }
+    console.log("期間を設定しました:", periods.length, "件");
+  }
 
   /**
    * 実績データを読み込みます
    *
-   * actualsは、前期の実際の数値を格納したオブジェクトです。
-   * 例: { revenue: 500000, cogs: 300000, ... }
-   *
-   * これらの値は、前期参照が必要な計算式の基礎となります。
+   * values は、(accountId, periodId) と値の組を持つ配列です。
+   * source が未指定の場合は ACTUAL とみなします。
    */
-  loadActuals(actuals: Record<AccountId, number>) {
-    this.actuals = { ...actuals };
-    console.log(
-      "実績データを読み込みました:",
-      Object.keys(actuals).length,
-      "件"
-    );
+  loadActuals(values: Value[]) {
+    for (const item of values) {
+      this.ensureAccountById(item.accountId);
+      this.ensurePeriodById(item.periodId);
+      const key = this.valueKey(item.periodId, item.accountId);
+      this.actualValues.set(key, item.value);
+    }
+    console.log("実績データを読み込みました:", values.length, "件");
   }
 
   /**
@@ -84,35 +126,47 @@ export class SimpleFAM {
    *
    * @returns 計算結果のオブジェクト（科目ID → 予測値）
    */
-  compute(): Record<AccountId, number> {
+  compute(
+    targetPeriodIds?: PeriodId[]
+  ): Record<PeriodId, Record<AccountId, number>> {
+    if (!this.periods.length) throw new Error("期間が設定されていません");
+    if (!Object.keys(this.rules).length)
+      throw new Error("ルールが設定されていません");
+
+    const requestedPeriods = (
+      targetPeriodIds ?? this.periods.map((p) => p.id)
+    ).map((id) => this.ensurePeriodById(id).id);
+    const orderedPeriodIds = requestedPeriods
+      .map((id) => ({ id, index: this.getPeriodIndex(id) }))
+      .sort((a, b) => a.index - b.index)
+      .map(({ id }) => id);
+
+    this.registry = new NodeRegistry();
+    this.accountNodes.clear();
+    this.visiting.clear();
+    this.forecastValues.clear();
+
     console.log("\n予測計算を開始します...");
 
-    // すべてのルールに対してASTノードを構築
-    const rootNodes: NodeId[] = [];
-    for (const accountId of Object.keys(this.rules) as AccountId[]) {
-      const nodeId = this.buildNode(accountId);
-      rootNodes.push(nodeId);
-    }
+    const output: Record<PeriodId, Record<AccountId, number>> = {};
 
-    console.log("ASTノードを構築しました:", rootNodes.length, "個");
+    for (const periodId of orderedPeriodIds) {
+      const period = this.ensurePeriodById(periodId);
+      console.log(`  - 期間 ${periodId} の計算を開始 (${period.label ?? ""})`);
+      output[periodId] = {};
 
-    // トポロジカルソートで依存関係を解決し、評価
-    const results = evalTopo(this.registry, rootNodes);
-    console.log("計算を完了しました");
-
-    // 結果を科目ID → 値のマップに変換
-    const forecast: Record<AccountId, number> = {};
-    for (const accountId of Object.keys(this.rules) as AccountId[]) {
-      const nodeId = this.accountNodes.get(accountId);
-      if (nodeId) {
-        const value = results.get(nodeId);
-        if (value !== undefined) {
-          forecast[accountId] = Math.round(value); // 整数に丸める
-        }
+      for (const accountId of Object.keys(this.rules) as AccountId[]) {
+        const nodeId = this.buildNode(periodId, accountId);
+        const result = evalTopo(this.registry, [nodeId]);
+        const value = result.get(nodeId) ?? 0;
+        this.setForecastValue(periodId, accountId, value);
+        output[periodId][accountId] = Math.round(value);
+        console.log(`    > ${accountId}@${periodId} = ${value.toFixed(2)}`);
       }
     }
 
-    return forecast;
+    console.log("予測計算を完了しました");
+    return output;
   }
 
   /**
@@ -131,113 +185,100 @@ export class SimpleFAM {
    * @param accountId - 構築する科目のID
    * @returns 構築されたASTノードのID
    */
-  private buildNode(accountId: AccountId): NodeId {
-    // 既に構築済みの場合は、そのノードIDを返す
-    if (this.accountNodes.has(accountId)) {
-      return this.accountNodes.get(accountId)!;
+  private buildNode(periodId: PeriodId, accountId: AccountId): NodeId {
+    const key = this.valueKey(periodId, accountId);
+    if (this.accountNodes.has(key)) return this.accountNodes.get(key)!;
+    if (this.visiting.has(key))
+      throw new Error(`循環参照が検出されました: ${accountId}@${periodId}`);
+    this.visiting.add(key);
+
+    const account = this.ensureAccountById(accountId);
+    const timelinePeriod = this.ensurePeriodById(periodId);
+    const accountLabel = account.AccountName ?? account.id;
+    const periodLabel = timelinePeriod.label ?? periodId;
+
+    const actualValue = this.actualValues.get(key);
+    if (actualValue != null) {
+      const nodeId = makeFF(
+        this.registry,
+        actualValue,
+        `${accountLabel}@${periodLabel}[Actual]`
+      );
+      this.accountNodes.set(key, nodeId);
+      this.visiting.delete(key);
+      return nodeId;
     }
 
-    // 循環参照のチェック
-    if (this.visiting.has(accountId)) {
-      throw new Error(`循環参照が検出されました: ${accountId}`);
-    }
-    this.visiting.add(accountId);
-
-    // ルールを取得
     const rule = this.rules[accountId];
     if (!rule) {
+      this.visiting.delete(key);
       throw new Error(`ルールが見つかりません: ${accountId}`);
     }
+
+    const context = {
+      periodId,
+      accountId,
+      accountLabel,
+    };
 
     let nodeId: NodeId;
 
     switch (rule.type) {
       case "INPUT": {
-        // 固定値を設定
-        // これは最もシンプルなルールで、指定された値をそのまま使います。
         nodeId = makeFF(
           this.registry,
           rule.value,
-          `${accountId}(INPUT:${rule.value})`
+          `${accountLabel}@${periodLabel}[Input=${rule.value}]`
         );
-        console.log(`  ${accountId}: INPUT=${rule.value}`);
         break;
       }
 
       case "CALCULATION": {
-        // 計算式を評価
-        // expressionを再帰的に処理して、ASTノードツリーを構築します。
-        nodeId = this.buildExpression(accountId, rule.expression);
-        console.log(`  ${accountId}: CALCULATION`);
+        nodeId = this.buildExpression(rule.expression, context);
         break;
       }
 
       case "REFERENCE": {
-        const expr: ExpressionNode = {
-          type: "ACCOUNT",
-          id: rule.ref,
-        };
-        nodeId = this.buildExpression(accountId, expr);
-        console.log(`  ${accountId}: REFERENCE -> ${rule.ref}`);
+        nodeId = this.buildExpression(
+          {
+            type: "ACCOUNT",
+            id: rule.ref,
+          },
+          context
+        );
         break;
       }
 
       case "GROWTH_RATE": {
-        const expr: ExpressionNode = {
-          type: "MUL",
-          left: {
-            type: "ACCOUNT",
-            id: rule.ref,
-            period: "PREV",
+        nodeId = this.buildExpression(
+          {
+            type: "MUL",
+            left: { type: "ACCOUNT", id: rule.ref, period: "PREV" },
+            right: { type: "NUMBER", value: 1 + rule.rate },
           },
-          right: {
-            type: "NUMBER",
-            value: 1 + rule.rate,
-          },
-        };
-        nodeId = this.buildExpression(accountId, expr);
-        console.log(
-          `  ${accountId}: GROWTH_RATE -> ${rule.ref} * (1 + ${rule.rate})`
+          context
         );
         break;
       }
 
       case "PERCENTAGE": {
-        const expr: ExpressionNode = {
-          type: "MUL",
-          left: {
-            type: "ACCOUNT",
-            id: rule.ref,
+        nodeId = this.buildExpression(
+          {
+            type: "MUL",
+            left: { type: "ACCOUNT", id: rule.ref },
+            right: { type: "NUMBER", value: rule.percentage },
           },
-          right: {
-            type: "NUMBER",
-            value: rule.percentage,
-          },
-        };
-        nodeId = this.buildExpression(accountId, expr);
-        console.log(
-          `  ${accountId}: PERCENTAGE -> ${rule.ref} * ${rule.percentage}`
+          context
         );
         break;
       }
 
       case "BALANCE_CHANGE": {
-        const flows = rule.flows;
-        if (!flows.length) {
-          nodeId = this.buildExpression(accountId, {
-            type: "NUMBER",
-            value: 0,
-          });
-          console.log(`  ${accountId}: BALANCE_CHANGE -> empty`);
-          break;
-        }
-
-        const expr = flows.reduce<ExpressionNode | null>((acc, flow) => {
+        const expr = rule.flows.reduce<ExpressionNode | null>((acc, flow) => {
           const baseNode: ExpressionNode = {
             type: "ACCOUNT",
             id: flow.ref,
           };
-
           const signedNode =
             flow.sign === "PLUS"
               ? baseNode
@@ -246,9 +287,7 @@ export class SimpleFAM {
                   left: baseNode,
                   right: { type: "NUMBER", value: -1 },
                 } as ExpressionNode);
-
           if (!acc) return signedNode;
-
           return {
             type: "ADD",
             left: acc,
@@ -257,29 +296,23 @@ export class SimpleFAM {
         }, null);
 
         nodeId = this.buildExpression(
-          accountId,
-          expr ?? {
-            type: "NUMBER",
-            value: 0,
-          }
-        );
-        console.log(
-          `  ${accountId}: BALANCE_CHANGE -> flows=${flows
-            .map((f) => `${f.sign === "PLUS" ? "+" : "-"}${f.ref}`)
-            .join(" ")}`
+          expr ?? { type: "NUMBER", value: 0 },
+          context
         );
         break;
       }
 
       default: {
-        return assertNeverExpression(rule, accountId);
+        this.visiting.delete(key);
+        return assertNever(
+          rule as never,
+          `未対応のルールタイプ: ${(rule as any).type}`
+        );
       }
     }
 
-    // 構築したノードを記録
-    this.accountNodes.set(accountId, nodeId);
-    this.visiting.delete(accountId);
-
+    this.accountNodes.set(key, nodeId);
+    this.visiting.delete(key);
     return nodeId;
   }
 
@@ -313,67 +346,103 @@ export class SimpleFAM {
    * @param expr - 計算式のノード
    * @returns 構築されたASTノードのID
    */
-  private buildExpression(contextId: string, expr: ExpressionNode): string {
+  private buildExpression(
+    expr: ExpressionNode,
+    ctx: {
+      periodId: PeriodId;
+      accountId: AccountId;
+      accountLabel: string;
+    }
+  ): NodeId {
+    const labelPrefix = `${ctx.accountLabel}@${ctx.periodId}`;
     switch (expr.type) {
       case "NUMBER": {
-        // 定数値
-        // 例：税率0.35、回転日数360など
-        return makeFF(this.registry, expr.value, `定数(${expr.value})`);
+        return makeFF(
+          this.registry,
+          expr.value,
+          `${labelPrefix}:const(${expr.value})`
+        );
       }
 
       case "ACCOUNT": {
-        // 他の科目への参照
-        const targetId = expr.id;
-
-        if (expr.period === "PREV") {
-          // 前期参照の場合は、実績データから値を取得
-          const prevValue = this.actuals[targetId];
-          if (prevValue === undefined) {
-            throw new Error(
-              `前期実績が見つかりません: ${targetId} ` +
-                `(参照元: ${contextId})`
-            );
-          }
-          return makeFF(
-            this.registry,
-            prevValue,
-            `${targetId}(前期:${prevValue})`
-          );
-        } else {
-          // 当期参照の場合は、依存先のノードを再帰的に構築
-          return this.buildNode(targetId);
-        }
+        const targetPeriodId = this.resolvePeriodId(ctx.periodId, expr.period);
+        return this.buildNode(targetPeriodId, expr.id);
       }
 
       case "ADD":
       case "SUB":
       case "MUL":
       case "DIV": {
-        // 二項演算
-        // 左右の部分式を再帰的に構築してから、演算ノードで結合します。
-        const leftNode = this.buildExpression(contextId, expr.left);
-        const rightNode = this.buildExpression(contextId, expr.right);
-
-        const opSymbol = {
-          ADD: "+",
-          SUB: "-",
-          MUL: "×",
-          DIV: "÷",
-        }[expr.type];
-
+        const leftNode = this.buildExpression(expr.left, ctx);
+        const rightNode = this.buildExpression(expr.right, ctx);
+        const operator = expr.type as Op;
         return makeTT(
           this.registry,
           leftNode,
           rightNode,
-          expr.type as Op,
-          `${contextId}(${opSymbol})`
+          operator,
+          `${labelPrefix}:${operator}`
         );
       }
 
       default: {
-        return assertNeverExpression(expr, contextId);
+        return assertNever(
+          expr as never,
+          `未対応の式タイプ: ${(expr as any).type} (context: ${labelPrefix})`
+        );
       }
     }
+  }
+
+  private resolvePeriodId(
+    basePeriodId: PeriodId,
+    reference?: PeriodReference
+  ): PeriodId {
+    if (!reference || reference === "CURRENT") return basePeriodId;
+    if (reference === "PREV") return this.findPeriodByOffset(basePeriodId, -1);
+    if (typeof reference === "string")
+      return this.ensurePeriodById(reference).id;
+    return this.findPeriodByOffset(basePeriodId, reference.offset ?? 0);
+  }
+
+  private findPeriodByOffset(basePeriodId: PeriodId, offset: number): PeriodId {
+    const baseIndex = this.getPeriodIndex(basePeriodId);
+    const targetIndex = baseIndex + offset;
+    const target = this.periods[targetIndex];
+    if (!target)
+      throw new Error(
+        `指定したオフセットに期間が存在しません: ${basePeriodId} (offset ${offset})`
+      );
+    return target.id;
+  }
+
+  private ensureAccountById(accountId: AccountId): Account {
+    const account = this.accounts.get(accountId);
+    if (!account) throw new Error(`アカウントが見つかりません: ${accountId}`);
+    return account;
+  }
+
+  private ensurePeriodById(periodId: PeriodId): TimelinePeriod {
+    const index = this.getPeriodIndex(periodId);
+    return this.periods[index];
+  }
+
+  private getPeriodIndex(periodId: PeriodId): number {
+    const index = this.periodIndexById.get(periodId);
+    if (index == null) throw new Error(`期間が見つかりません: ${periodId}`);
+    return index;
+  }
+
+  private valueKey(periodId: PeriodId, accountId: AccountId): string {
+    return `${periodId}::${accountId}`;
+  }
+
+  private setForecastValue(
+    periodId: PeriodId,
+    accountId: AccountId,
+    value: number
+  ) {
+    this.forecastValues.set(this.valueKey(periodId, accountId), value);
   }
 
   /**
@@ -398,28 +467,6 @@ export class SimpleFAM {
   }
 }
 
-function assertNeverExpression(expr: never, contextId: string): never {
-  throw new Error(
-    `未対応の式タイプ: ${(expr as any).type} (context: ${contextId})`
-  );
+function assertNever(_value: never, message: string): never {
+  throw new Error(message);
 }
-
-/**
- * ルールの型定義
- *
- * 簡素版では、INPUT と CALCULATION の2種類のみをサポートします。
- * これだけでも、ほとんどの財務計算を表現できます。
- */
-type Rule =
-  | { type: "INPUT"; value: number }
-  | { type: "CALCULATION"; expression: ExpressionNode }
-  | { type: "GROWTH_RATE"; rate: number; ref: AccountId }
-  | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
-  | { type: "REFERENCE"; ref: AccountId }
-  | {
-      type: "BALANCE_CHANGE";
-      flows: Array<{
-        ref: AccountId;
-        sign: "PLUS" | "MINUS";
-      }>;
-    };

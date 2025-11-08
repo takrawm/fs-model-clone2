@@ -2,43 +2,73 @@
 
 import { SimpleFAM } from "./fam/simpleFam.ts";
 import { forecastRules } from "./data/forecastRules.ts";
-import { seedActuals } from "./data/seedData.ts";
+import {
+  seedAccounts,
+  seedActualValues,
+  seedPeriods,
+} from "./data/seedData.ts";
 
-// FAMを初期化して計算
 const fam = new SimpleFAM();
-fam.loadActuals(seedActuals);
+fam.setAccounts(seedAccounts);
+fam.setPeriods(seedPeriods);
+fam.loadActuals(seedActualValues);
 fam.setRules(forecastRules);
 
-// デバッグ用：AST構造を表示
-fam.printAST();
+// FY2025 の予測を実行（FY2023/FY2024はシード実績として取り込み済み）
+const targetPeriods = ["FY2025"];
+const forecast = fam.compute(targetPeriods);
+const forecastFY2025 = forecast["FY2025"];
 
-// 予測計算の実行
-const forecast = fam.compute();
+// 比較用に FY2024 実績を取得
+const actualFY2024 = periodValues("FY2024");
 
-// 結果の表示
-console.log("\n=== 予測結果 ===");
-console.log("商品単価:", forecast.unit_price, "円");
-console.log("販売数量:", forecast.quantity, "個");
-console.log("売上高:", forecast.revenue.toLocaleString(), "円");
-console.log("売上原価:", forecast.cogs.toLocaleString(), "円");
-console.log("売上総利益:", forecast.gross_profit.toLocaleString(), "円");
-console.log("販管費:", forecast.opex.toLocaleString(), "円");
-console.log("営業利益:", forecast.operating_profit.toLocaleString(), "円");
+// 結果表示
+console.log("\n=== FY2025 予測結果 ===");
+printKPI("商品単価", forecastFY2025.unit_price, "円");
+printKPI("販売数量", forecastFY2025.quantity, "個");
+printMoney("売上高", forecastFY2025.revenue);
+printMoney("売上原価", forecastFY2025.cogs);
+printMoney("売上総利益", forecastFY2025.gross_profit);
+printMoney("販管費", forecastFY2025.opex);
+printMoney("営業利益", forecastFY2025.operating_profit);
 
-// 前期との比較
-console.log("\n=== 前期比較 ===");
-console.log(
-  "売上高:",
-  `${seedActuals.revenue.toLocaleString()}円 → ` +
-    `${forecast.revenue.toLocaleString()}円 ` +
-    `(+${((forecast.revenue / seedActuals.revenue - 1) * 100).toFixed(1)}%)`
+console.log("\n=== FY2024 実績 vs FY2025 予測 ===");
+printComparison("売上高", actualFY2024.revenue, forecastFY2025.revenue);
+printComparison(
+  "営業利益",
+  actualFY2024.operating_profit,
+  forecastFY2025.operating_profit
 );
-console.log(
-  "営業利益:",
-  `${seedActuals.operating_profit.toLocaleString()}円 → ` +
-    `${forecast.operating_profit.toLocaleString()}円 ` +
-    `(+${(
-      (forecast.operating_profit / seedActuals.operating_profit - 1) *
-      100
-    ).toFixed(1)}%)`
-);
+
+// デバッグ用：AST構造を表示（コメント解除で確認可能）
+// fam.printAST();
+
+function periodValues(periodId: string): Record<string, number> {
+  return Object.fromEntries(
+    seedActualValues
+      .filter((value) => value.periodId === periodId)
+      .map((value) => [value.accountId, value.value])
+  );
+}
+
+function printKPI(label: string, value: number | undefined, unit: string) {
+  if (value == null) return;
+  console.log(`${label}: ${value.toLocaleString()}${unit}`);
+}
+
+function printMoney(label: string, value: number | undefined) {
+  if (value == null) return;
+  console.log(`${label}: ${value.toLocaleString()} 円`);
+}
+
+function printComparison(
+  label: string,
+  actual: number | undefined,
+  forecastValue: number | undefined
+) {
+  if (actual == null || forecastValue == null) return;
+  const diffRate = ((forecastValue / actual - 1) * 100).toFixed(1);
+  console.log(
+    `${label}: ${actual.toLocaleString()}円 → ${forecastValue.toLocaleString()}円 (+${diffRate}%)`
+  );
+}

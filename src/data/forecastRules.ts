@@ -1,9 +1,6 @@
-import type { SimpleFAM } from "../fam/simpleFam.ts";
-import type { AccountId } from "../model/types.ts";
+import type { AccountId, Rule } from "../model/types.ts";
 
-type RuleMap = Parameters<SimpleFAM["setRules"]>[0];
-
-export const forecastRules: RuleMap = {
+export const forecastRules: Record<AccountId, Rule> = {
   unit_price: {
     type: "INPUT",
     value: 1050,
