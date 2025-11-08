@@ -1,0 +1,48 @@
+{
+  "accounts": [
+    {
+      "id": "revenue",
+      "name": "売上高",
+      "description": "商品やサービスの販売による収入"
+    },
+    {
+      "id": "unit_price",
+      "name": "商品単価",
+      "description": "商品1個あたりの販売価格"
+    },
+    {
+      "id": "quantity",
+      "name": "販売数量",
+      "description": "販売した商品の個数"
+    },
+    {
+      "id": "cogs",
+      "name": "売上原価",
+      "description": "商品の仕入れや製造にかかったコスト"
+    },
+    {
+      "id": "gross_profit",
+      "name": "売上総利益",
+      "description": "売上から原価を引いた粗利益"
+    },
+    {
+      "id": "opex",
+      "name": "販管費",
+      "description": "販売費及び一般管理費（営業活動にかかる経費）"
+    },
+    {
+      "id": "operating_profit",
+      "name": "営業利益",
+      "description": "本業の収益力を表す利益"
+    }
+  ],
+  "actuals": {
+    "unit_price": 1000,
+    "quantity": 500,
+    "revenue": 500000,
+    "cogs": 300000,
+    "gross_profit": 200000,
+    "opex": 80000,
+    "operating_profit": 120000
+  }
+}

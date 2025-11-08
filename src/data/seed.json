@@ -1,0 +1,493 @@
+{
+  "accountsMaster": [
+    {
+      "id": "pl-1",
+      "AccountName": "商品売上",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-6"
+    },
+    {
+      "id": "pl-2",
+      "AccountName": "商品単価",
+      "fs_type": "PL",
+      "is_kpi": true,
+      "parent_id": "pl-1"
+    },
+    {
+      "id": "pl-3",
+      "AccountName": "商品数量",
+      "fs_type": "PL",
+      "is_kpi": true,
+      "parent_id": "pl-1"
+    },
+    {
+      "id": "pl-4",
+      "AccountName": "商品手数料",
+      "fs_type": "PL",
+      "is_kpi": true,
+      "parent_id": "pl-1"
+    },
+    {
+      "id": "pl-5",
+      "AccountName": "サービス売上",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-6"
+    },
+    {
+      "id": "pl-6",
+      "AccountName": "売上高合計",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-7",
+      "AccountName": "売上原価合計",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-8",
+      "AccountName": "売上総利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-9",
+      "AccountName": "人件費",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-14"
+    },
+    {
+      "id": "pl-10",
+      "AccountName": "物流費",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-14"
+    },
+    {
+      "id": "pl-11",
+      "AccountName": "減価償却費",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-14"
+    },
+    {
+      "id": "pl-12",
+      "AccountName": "のれん償却費",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-14"
+    },
+    {
+      "id": "pl-13",
+      "AccountName": "その他販管費",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": "pl-14"
+    },
+    {
+      "id": "pl-14",
+      "AccountName": "販管費合計",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-15",
+      "AccountName": "営業利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-16",
+      "AccountName": "営業外収益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-17",
+      "AccountName": "営業外費用",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-18",
+      "AccountName": "経常利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-19",
+      "AccountName": "特別利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-20",
+      "AccountName": "特別損失",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-21",
+      "AccountName": "税引前当期利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-22",
+      "AccountName": "課税所得",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-23",
+      "AccountName": "法人税等",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pl-24",
+      "AccountName": "税引後当期利益",
+      "fs_type": "PL",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "bs-1",
+      "AccountName": "現預金合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-4"
+    },
+    {
+      "id": "bs-2",
+      "AccountName": "売掛金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-4"
+    },
+    {
+      "id": "bs-3",
+      "AccountName": "棚卸資産",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-4"
+    },
+    {
+      "id": "bs-4",
+      "AccountName": "流動資産合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-8"
+    },
+    {
+      "id": "bs-5",
+      "AccountName": "有形固定資産",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-7",
+      "balanceChange": {
+        "flows": [
+          {
+            "driver": "pp-1",
+            "sign": "PLUS",
+            "counter": "bs-1",
+            "cf_category": "CFI"
+          },
+          {
+            "driver": "pl-11",
+            "sign": "MINUS",
+            "counter": "bs-17",
+            "cf_category": "CFO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bs-6",
+      "AccountName": "のれん",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-7",
+      "balanceChange": {
+        "flows": [
+          {
+            "driver": "pp-2",
+            "sign": "PLUS",
+            "counter": "bs-1",
+            "cf_category": "CFI"
+          },
+          {
+            "driver": "pl-12",
+            "sign": "MINUS",
+            "counter": "bs-17",
+            "cf_category": "CFO"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bs-7",
+      "AccountName": "固定資産合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-8"
+    },
+    {
+      "id": "bs-8",
+      "AccountName": "資産合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "bs-9",
+      "AccountName": "買掛金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-11"
+    },
+    {
+      "id": "bs-10",
+      "AccountName": "未払金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-11"
+    },
+    {
+      "id": "bs-11",
+      "AccountName": "流動負債合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-15"
+    },
+    {
+      "id": "bs-12",
+      "AccountName": "長期借入金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-14",
+      "balanceChange": {
+        "flows": [
+          {
+            "driver": "fn-1",
+            "sign": "PLUS",
+            "counter": "bs-1",
+            "cf_category": "CFF"
+          },
+          {
+            "driver": "fn-2",
+            "sign": "MINUS",
+            "counter": "bs-1",
+            "cf_category": "CFF"
+          }
+        ]
+      }
+    },
+    {
+      "id": "bs-13",
+      "AccountName": "社債",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-14"
+    },
+    {
+      "id": "bs-14",
+      "AccountName": "固定負債合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-15"
+    },
+    {
+      "id": "bs-15",
+      "AccountName": "負債合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-19"
+    },
+    {
+      "id": "bs-16",
+      "AccountName": "資本金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-18"
+    },
+    {
+      "id": "bs-17",
+      "AccountName": "利益剰余金",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-18",
+      "balanceChange": {
+        "flows": [
+          {
+            "driver": "pl-15",
+            "sign": "PLUS",
+            "counter": null
+          }
+        ]
+      }
+    },
+    {
+      "id": "bs-18",
+      "AccountName": "純資産合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": "bs-19"
+    },
+    {
+      "id": "bs-19",
+      "AccountName": "負債及び純資産合計",
+      "fs_type": "BS",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pp-1",
+      "AccountName": "設備投資",
+      "fs_type": "PP&E",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "pp-2",
+      "AccountName": "無形資産投資",
+      "fs_type": "PP&E",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "fn-1",
+      "AccountName": "新規借入",
+      "fs_type": "Financing",
+      "is_kpi": false,
+      "parent_id": null
+    },
+    {
+      "id": "fn-2",
+      "AccountName": "借入金返済",
+      "fs_type": "Financing",
+      "is_kpi": false,
+      "parent_id": null
+    }
+  ],
+  "PREVS": [
+    {
+      "pl-1": 3010.0,
+      "pl-2": 100.0,
+      "pl-3": 30.0,
+      "pl-4": 10.0,
+      "pl-5": 60.0,
+      "pl-6": 3070.0,
+      "pl-7": 1842.0,
+      "pl-8": 1228.0,
+      "pl-9": 200.0,
+      "pl-10": 30.7,
+      "pl-11": 180.0,
+      "pl-12": 100.0,
+      "pl-13": 90.0,
+      "pl-14": 600.7,
+      "pl-15": 627.3,
+      "pl-16": 10.0,
+      "pl-17": 20.0,
+      "pl-18": 617.3,
+      "pl-19": 0.0,
+      "pl-20": 0.0,
+      "pl-21": 617.3,
+      "pl-22": 717.3,
+      "pl-23": 251.05499999999998,
+      "pl-24": 366.245,
+      "bs-1": 1500.0,
+      "bs-2": 255.83333333333331,
+      "bs-3": 511.66666666666663,
+      "bs-4": 2267.5,
+      "bs-5": 1200.0,
+      "bs-6": 900.0,
+      "bs-7": 2100.0,
+      "bs-8": 4367.5,
+      "bs-9": 307.0,
+      "bs-10": 204.66666666666666,
+      "bs-11": 511.66666666666663,
+      "bs-12": 750.0,
+      "bs-13": 100.0,
+      "bs-14": 850.0,
+      "bs-15": 1361.6666666666665,
+      "bs-16": 2000.0,
+      "bs-17": 1005.8333333333335,
+      "bs-18": 3005.8333333333335,
+      "bs-19": 4367.5,
+      "pp-1": 200.0,
+      "pp-2": 120.0
+    },
+    {
+      "pl-1": 3475.0,
+      "pl-2": 105.0,
+      "pl-3": 33.0,
+      "pl-4": 10.0,
+      "pl-5": 63.0,
+      "pl-6": 3538.0,
+      "pl-7": 2122.7999999999997,
+      "pl-8": 1415.2000000000003,
+      "pl-9": 230.4885993485342,
+      "pl-10": 35.38,
+      "pl-11": 189.0,
+      "pl-12": 115.2442996742671,
+      "pl-13": 90.0,
+      "pl-14": 660.1128990228012,
+      "pl-15": 755.087100977199,
+      "pl-16": 11.52442996742671,
+      "pl-17": 23.04885993485342,
+      "pl-18": 743.5626710097723,
+      "pl-19": 0.0,
+      "pl-20": 0.0,
+      "pl-21": 743.5626710097723,
+      "pl-22": 858.8069706840395,
+      "pl-23": 300.5824397394138,
+      "pl-24": 442.9802312703585,
+      "bs-1": 1809.931371335505,
+      "bs-2": 294.8333333333333,
+      "bs-3": 589.6666666666666,
+      "bs-4": 2694.431371335505,
+      "bs-5": 1221.0,
+      "bs-6": 923.0488599348535,
+      "bs-7": 2144.0488599348537,
+      "bs-8": 4838.480231270359,
+      "bs-9": 353.79999999999995,
+      "bs-10": 235.86666666666662,
+      "bs-11": 589.6666666666665,
+      "bs-12": 700.0,
+      "bs-13": 100.0,
+      "bs-14": 800.0,
+      "bs-15": 1389.6666666666665,
+      "bs-16": 2000.0,
+      "bs-17": 1448.813564603692,
+      "bs-18": 3448.8135646036917,
+      "bs-19": 4838.480231270358,
+      "pp-1": 210.0,
+      "pp-2": 138.29315960912052,
+      "fn-1": 50.0,
+      "fn-2": 100.0
+    }
+  ],
+  "rules": {},
+  "metadata": {
+    "startYear": 2024,
+    "actualYears": [2024, 2025]
+  }
+}
