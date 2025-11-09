@@ -16,6 +16,8 @@ import type {
   ValueKeyString,
 } from "../model/types.ts";
 import { createPeriod } from "../utils/periodUtils.ts";
+import { ruleHandlers } from "./ruleHandlers.ts";
+import type { RuleHandlerContext } from "./ruleHandlers.ts";
 
 /**
  * 簡素版FAM（Financial Analysis Model）
@@ -39,7 +41,7 @@ import { createPeriod } from "../utils/periodUtils.ts";
  */
 export class SimpleFAM {
   // ASTノードを管理するレジストリ
-  private registry: NodeRegistry = new NodeRegistry();
+  private nodeRegistry: NodeRegistry = new NodeRegistry();
 
   // アカウントマスタ
   private accounts: Map<AccountId, Account> = new Map();
@@ -55,8 +57,9 @@ export class SimpleFAM {
   // 計算ルールを保持
   private rules: Record<AccountId, Rule> = {};
 
-  // 各科目×期間に対応するASTノードID
-  private accountNodes: Map<string, NodeId> = new Map();
+  // 各科目×期間に対応するASTノードIDのキャッシュ
+  // ValueKeyString（"${periodId}::${accountId}"）からNodeIdへのマッピング
+  private valueKeyToNodeId: Map<ValueKeyString, NodeId> = new Map();
 
   // 循環参照検出用
   private visiting: Set<string> = new Set();
@@ -130,8 +133,8 @@ export class SimpleFAM {
     this.periods.push(nextPeriod);
     this.periodIndexById.set(nextPeriod.id, this.periods.length - 1);
 
-    this.registry = new NodeRegistry();
-    this.accountNodes.clear();
+    this.nodeRegistry = new NodeRegistry();
+    this.valueKeyToNodeId.clear();
     this.visiting.clear();
 
     console.log("\n予測計算を開始します...");
@@ -146,7 +149,7 @@ export class SimpleFAM {
 
     for (const accountId of Object.keys(this.rules) as AccountId[]) {
       const nodeId = this.buildNode(nextPeriod.id, accountId);
-      const result = evalTopo(this.registry, [nodeId]);
+      const result = evalTopo(this.nodeRegistry, [nodeId]);
       const value = result.get(nodeId) ?? 0;
       this.setValue(nextPeriod.id, accountId, value);
       output[nextPeriod.id][accountId] = Math.round(value);
@@ -179,193 +182,56 @@ export class SimpleFAM {
    * @returns 構築されたASTノードのID
    */
   private buildNode(periodId: PeriodId, accountId: AccountId): NodeId {
-    const key = this.createValueKeyString(periodId, accountId);
-    if (this.accountNodes.has(key)) return this.accountNodes.get(key)!;
-    if (this.visiting.has(key))
+    const valueKey = this.createValueKeyString(periodId, accountId);
+    if (this.valueKeyToNodeId.has(valueKey))
+      return this.valueKeyToNodeId.get(valueKey)!;
+    if (this.visiting.has(valueKey))
       throw new Error(`循環参照が検出されました: ${accountId}@${periodId}`);
-    this.visiting.add(key);
-
-    const account = this.ensureAccountById(accountId);
-    const period = this.ensurePeriodById(periodId);
-    const accountLabel = account.AccountName ?? account.id;
-    const periodLabel = period.label ?? periodId;
+    this.visiting.add(valueKey);
 
     // 登録済みの値を確認
-    const registeredValue = this.values.get(key);
+    const registeredValue = this.values.get(valueKey);
     if (registeredValue != null) {
       const nodeId = makeFF(
-        this.registry,
+        this.nodeRegistry,
         registeredValue,
-        `${accountLabel}@${periodLabel}[Registered]`
+        `${accountId}@${periodId}[Registered]`
       );
-      this.accountNodes.set(key, nodeId);
-      this.visiting.delete(key);
+      this.valueKeyToNodeId.set(valueKey, nodeId);
+      this.visiting.delete(valueKey);
       return nodeId;
     }
 
+    // 期間ごとにルールが変わる場合は、rulesのキーをAccountIdからValueKeyStringに変更する必要がある
     const rule = this.rules[accountId];
     if (!rule) {
-      this.visiting.delete(key);
+      this.visiting.delete(valueKey);
       throw new Error(`ルールが見つかりません: ${accountId}`);
     }
 
-    const context = {
+    const handlerContext: RuleHandlerContext = {
       periodId,
       accountId,
-      accountLabel,
+      nodeRegistry: this.nodeRegistry,
+      buildNode: (pId, aId) => this.buildNode(pId, aId),
+      buildExpression: (expr, ctx) => this.buildExpression(expr, ctx),
+      resolvePeriodId: (pId, ref) => this.resolvePeriodId(pId, ref),
     };
 
-    let nodeId: NodeId;
-
-    switch (rule.type) {
-      case "INPUT": {
-        nodeId = makeFF(
-          this.registry,
-          rule.value,
-          `${accountLabel}@${periodLabel}[Input=${rule.value}]`
-        );
-        break;
-      }
-
-      case "CALCULATION": {
-        nodeId = this.buildExpression(rule.expression, context);
-        break;
-      }
-
-      case "FIXED_VALUE": {
-        const targetAccountId = rule.ref ?? accountId;
-        const prevPeriodId = this.resolvePeriodId(context.periodId, {
-          offset: -1,
-        });
-        nodeId = this.buildNode(prevPeriodId, targetAccountId);
-        break;
-      }
-
-      case "REFERENCE": {
-        nodeId = this.buildExpression(
-          {
-            type: "ACCOUNT",
-            id: rule.ref,
-          },
-          context
-        );
-        break;
-      }
-
-      case "PROPORTIONATE": {
-        const driverAccount = rule.ref;
-        const prevPeriodId = this.resolvePeriodId(context.periodId, {
-          offset: -1,
-        });
-
-        const driverCurrent = this.buildNode(context.periodId, driverAccount);
-        const driverPrev = this.buildNode(prevPeriodId, driverAccount);
-        const basePrev = this.buildNode(prevPeriodId, accountId);
-
-        const ratioNode = makeTT(
-          this.registry,
-          driverCurrent,
-          driverPrev,
-          "DIV",
-          `${driverAccount}@${context.periodId}/prev`
-        );
-
-        nodeId = makeTT(
-          this.registry,
-          basePrev,
-          ratioNode,
-          "MUL",
-          `${accountId}@${context.periodId}:proportionate`
-        );
-        break;
-      }
-
-      case "GROWTH_RATE": {
-        nodeId = this.buildExpression(
-          {
-            type: "MUL",
-            left: { type: "ACCOUNT", id: rule.ref, period: "PREV" },
-            right: { type: "NUMBER", value: 1 + rule.rate },
-          },
-          context
-        );
-        break;
-      }
-
-      case "PERCENTAGE": {
-        nodeId = this.buildExpression(
-          {
-            type: "MUL",
-            left: { type: "ACCOUNT", id: rule.ref },
-            right: { type: "NUMBER", value: rule.percentage },
-          },
-          context
-        );
-        break;
-      }
-
-      case "BALANCE_CHANGE": {
-        // 1. 前期のPeriodIDを取得
-        const prevPeriodId = this.resolvePeriodId(context.periodId, {
-          offset: -1,
-        });
-
-        // 2. この勘定(accountId)の前期末残高のノードを構築
-        const prevBalanceNodeId = this.buildNode(prevPeriodId, accountId);
-
-        // 3. フロー（当期増減）の合計式を構築 (ここは元のロジック)
-        const flowsExpr = rule.flows.reduce<ExpressionNode | null>(
-          (acc, flow) => {
-            const baseNode: ExpressionNode = {
-              type: "ACCOUNT",
-              id: flow.ref,
-            };
-            const signedNode =
-              flow.sign === "PLUS"
-                ? baseNode
-                : ({
-                    type: "MUL",
-                    left: baseNode,
-                    right: { type: "NUMBER", value: -1 },
-                  } as ExpressionNode);
-            if (!acc) return signedNode;
-            return {
-              type: "ADD",
-              left: acc,
-              right: signedNode,
-            };
-          },
-          null
-        );
-
-        // 4. フロー合計のノードを構築
-        const flowsNodeId = this.buildExpression(
-          flowsExpr ?? { type: "NUMBER", value: 0 },
-          context
-        );
-
-        // 5. 最終的なノードID = 前期末残高ノード + フロー合計ノード
-        nodeId = makeTT(
-          this.registry,
-          prevBalanceNodeId, // 前期末残高
-          flowsNodeId, // 当期増減
-          "ADD", // 加算
-          `${accountId}@${context.periodId}:balance_change`
-        );
-        break;
-      }
-
-      default: {
-        this.visiting.delete(key);
-        return assertNever(
-          rule as never,
-          `未対応のルールタイプ: ${(rule as any).type}`
-        );
-      }
+    const handler = ruleHandlers[rule.type];
+    if (!handler) {
+      this.visiting.delete(valueKey);
+      throw new Error(`未対応のルールタイプ: ${(rule as any).type}`);
     }
 
-    this.accountNodes.set(key, nodeId);
-    this.visiting.delete(key);
+    // TypeScriptの型システムでは、rule.typeが特定の値であることを認識させるために
+    // 型アサーションが必要です。実行時にはrule.typeとhandlerの対応が保証されています。
+    const nodeId = (
+      handler as (rule: Rule, context: RuleHandlerContext) => NodeId
+    )(rule, handlerContext);
+
+    this.valueKeyToNodeId.set(valueKey, nodeId);
+    this.visiting.delete(valueKey);
     return nodeId;
   }
 
@@ -404,14 +270,13 @@ export class SimpleFAM {
     ctx: {
       periodId: PeriodId;
       accountId: AccountId;
-      accountLabel: string;
     }
   ): NodeId {
-    const labelPrefix = `${ctx.accountLabel}@${ctx.periodId}`;
+    const labelPrefix = `${ctx.accountId}@${ctx.periodId}`;
     switch (expr.type) {
       case "NUMBER": {
         return makeFF(
-          this.registry,
+          this.nodeRegistry,
           expr.value,
           `${labelPrefix}:const(${expr.value})`
         );
@@ -430,7 +295,7 @@ export class SimpleFAM {
         const rightNode = this.buildExpression(expr.right, ctx);
         const operator = expr.type as Op;
         return makeTT(
-          this.registry,
+          this.nodeRegistry,
           leftNode,
           rightNode,
           operator,
@@ -670,7 +535,7 @@ export class SimpleFAM {
    */
   printAST() {
     console.log("\n=== AST構造 ===");
-    for (const node of this.registry.all()) {
+    for (const node of this.nodeRegistry.all()) {
       if (node.type === "FF") {
         console.log(`${node.id}: FF(${node.value}) - ${node.label}`);
       } else {
