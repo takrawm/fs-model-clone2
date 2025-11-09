@@ -320,10 +320,10 @@ export interface Value {
 export type Rule =
   | { type: "INPUT"; value: number }
   | { type: "CALCULATION"; expression: ExpressionNode }
-  | { type: "GROWTH_RATE"; rate: number; ref: AccountId }
+  | { type: "GROWTH_RATE"; rate: number }
   | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
   | { type: "REFERENCE"; ref: AccountId }
-  | { type: "FIXED_VALUE"; ref?: AccountId }
+  | { type: "FIXED_VALUE" }
   | { type: "PROPORTIONATE"; ref: AccountId }
   | {
       type: "BALANCE_CHANGE";

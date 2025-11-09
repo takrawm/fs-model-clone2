@@ -23,17 +23,8 @@ export interface RuleHandlerContext {
   accountId: AccountId;
   nodeRegistry: NodeRegistry;
   buildNode: (periodId: PeriodId, accountId: AccountId) => NodeId;
-  buildExpression: (
-    expr: ExpressionNode,
-    ctx: {
-      periodId: PeriodId;
-      accountId: AccountId;
-    }
-  ) => NodeId;
-  resolvePeriodId: (
-    basePeriodId: PeriodId,
-    reference?: PeriodReference
-  ) => PeriodId;
+  buildExpression: (expr: ExpressionNode) => NodeId;
+  resolvePeriodId: (reference?: PeriodReference) => PeriodId;
 }
 
 /**
@@ -41,9 +32,11 @@ export interface RuleHandlerContext {
  * 型の可読性を向上させるため、各ルールタイプを個別に定義します
  * 型の絞り込みは、実行時の値に対して、TypeScriptが型をより具体的に絞り込むこと
  * ここでは型レベルでの操作で、ユニオン型から特定の型を抽出する「型の抽出」を行っている
+ *
+ * 具体的な実装はsimpleFam.tsで定義
  */
-// Extract<Rule, { type: "INPUT" }>は、Ruleからtype: "INPUT"を持つ型だけを抽出します
-// 結果は { type: "INPUT"; value: number } になります
+// Extract<Rule, { type: "INPUT" }>は、Ruleからtype: "INPUT"を持つ型だけを抽出する
+// 結果は { type: "INPUT"; value: number }
 type InputRule = Extract<Rule, { type: "INPUT" }>;
 type CalculationRule = Extract<Rule, { type: "CALCULATION" }>;
 type FixedValueRule = Extract<Rule, { type: "FIXED_VALUE" }>;
@@ -95,24 +88,20 @@ export const handleInput: InputRuleHandler = (rule, context) => {
  * 計算式を評価します
  */
 export const handleCalculation: CalculationRuleHandler = (rule, context) => {
-  const { buildExpression, periodId, accountId } = context;
-  return buildExpression(rule.expression, {
-    periodId,
-    accountId,
-  });
+  const { buildExpression } = context;
+  return buildExpression(rule.expression);
 };
 
 /**
  * FIXED_VALUEルールのハンドラー
  * 前期の値をそのまま使用します
  */
-export const handleFixedValue: FixedValueRuleHandler = (rule, context) => {
-  const { accountId, periodId, resolvePeriodId, buildNode } = context;
-  const targetAccountId = rule.ref ?? accountId;
-  const prevPeriodId = resolvePeriodId(periodId, {
+export const handleFixedValue: FixedValueRuleHandler = (_rule, context) => {
+  const { accountId, resolvePeriodId, buildNode } = context;
+  const prevPeriodId = resolvePeriodId({
     offset: -1,
   });
-  return buildNode(prevPeriodId, targetAccountId);
+  return buildNode(prevPeriodId, accountId);
 };
 
 /**
@@ -120,17 +109,11 @@ export const handleFixedValue: FixedValueRuleHandler = (rule, context) => {
  * 他の科目を参照します
  */
 export const handleReference: ReferenceRuleHandler = (rule, context) => {
-  const { buildExpression, periodId, accountId } = context;
-  return buildExpression(
-    {
-      type: "ACCOUNT",
-      id: rule.ref,
-    },
-    {
-      periodId,
-      accountId,
-    }
-  );
+  const { buildExpression } = context;
+  return buildExpression({
+    type: "ACCOUNT",
+    id: rule.ref,
+  });
 };
 
 /**
@@ -144,7 +127,7 @@ export const handleProportionate: ProportionateRuleHandler = (
   const { accountId, periodId, nodeRegistry, buildNode, resolvePeriodId } =
     context;
   const driverAccount = rule.ref;
-  const prevPeriodId = resolvePeriodId(periodId, {
+  const prevPeriodId = resolvePeriodId({
     offset: -1,
   });
 
@@ -174,18 +157,12 @@ export const handleProportionate: ProportionateRuleHandler = (
  * 前期値に成長率を掛けます
  */
 export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
-  const { buildExpression, periodId, accountId } = context;
-  return buildExpression(
-    {
-      type: "MUL",
-      left: { type: "ACCOUNT", id: rule.ref, period: "PREV" },
-      right: { type: "NUMBER", value: 1 + rule.rate },
-    },
-    {
-      periodId,
-      accountId,
-    }
-  );
+  const { accountId, buildExpression } = context;
+  return buildExpression({
+    type: "MUL",
+    left: { type: "ACCOUNT", id: accountId, period: "PREV" },
+    right: { type: "NUMBER", value: 1 + rule.rate },
+  });
 };
 
 /**
@@ -193,18 +170,12 @@ export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
  * 参照科目に割合を掛けます
  */
 export const handlePercentage: PercentageRuleHandler = (rule, context) => {
-  const { buildExpression, periodId, accountId } = context;
-  return buildExpression(
-    {
-      type: "MUL",
-      left: { type: "ACCOUNT", id: rule.ref },
-      right: { type: "NUMBER", value: rule.percentage },
-    },
-    {
-      periodId,
-      accountId,
-    }
-  );
+  const { buildExpression } = context;
+  return buildExpression({
+    type: "MUL",
+    left: { type: "ACCOUNT", id: rule.ref },
+    right: { type: "NUMBER", value: rule.percentage },
+  });
 };
 
 /**
@@ -225,7 +196,7 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
   } = context;
 
   // 1. 前期のPeriodIDを取得
-  const prevPeriodId = resolvePeriodId(periodId, {
+  const prevPeriodId = resolvePeriodId({
     offset: -1,
   });
 
@@ -256,11 +227,7 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
 
   // 4. フロー合計のノードを構築
   const flowsNodeId = buildExpression(
-    flowsExpr ?? { type: "NUMBER", value: 0 },
-    {
-      periodId,
-      accountId,
-    }
+    flowsExpr ?? { type: "NUMBER", value: 0 }
   );
 
   // 5. 最終的なノードID = 前期末残高ノード + フロー合計ノード

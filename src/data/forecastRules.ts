@@ -4,12 +4,10 @@ export const forecastRules: Record<AccountId, Rule> = {
   unit_price: {
     type: "GROWTH_RATE",
     rate: 0.1,
-    ref: "unit_price",
   },
   quantity: {
     type: "GROWTH_RATE",
     rate: 0.1,
-    ref: "quantity",
   },
   revenue: {
     type: "CALCULATION",
@@ -108,7 +106,6 @@ export const forecastRules: Record<AccountId, Rule> = {
   account_payable: {
     type: "GROWTH_RATE",
     rate: 0.05,
-    ref: "account_payable",
   },
   bills_payable: {
     type: "PROPORTIONATE",

@@ -202,6 +202,7 @@ export class SimpleFAM {
       return nodeId;
     }
 
+    // 対応する勘定科目のRuleを取得
     // 期間ごとにルールが変わる場合は、rulesのキーをAccountIdからValueKeyStringに変更する必要がある
     const rule = this.rules[accountId];
     if (!rule) {
@@ -214,20 +215,25 @@ export class SimpleFAM {
       accountId,
       nodeRegistry: this.nodeRegistry,
       buildNode: (pId, aId) => this.buildNode(pId, aId),
-      buildExpression: (expr, ctx) => this.buildExpression(expr, ctx),
-      resolvePeriodId: (pId, ref) => this.resolvePeriodId(pId, ref),
+      buildExpression: (expr) =>
+        this.buildExpression(expr, {
+          periodId,
+          accountId,
+        }),
+      resolvePeriodId: (ref) => this.resolvePeriodId(periodId, ref),
     };
 
-    const handler = ruleHandlers[rule.type];
-    if (!handler) {
+    //
+    const ruleHandler = ruleHandlers[rule.type];
+    if (!ruleHandler) {
       this.visiting.delete(valueKey);
       throw new Error(`未対応のルールタイプ: ${(rule as any).type}`);
     }
 
-    // TypeScriptの型システムでは、rule.typeが特定の値であることを認識させるために
-    // 型アサーションが必要です。実行時にはrule.typeとhandlerの対応が保証されています。
+    // ruleHandlerはruleHandlers[rule.type]から取得したハンドラー関数
+    //
     const nodeId = (
-      handler as (rule: Rule, context: RuleHandlerContext) => NodeId
+      ruleHandler as (rule: Rule, context: RuleHandlerContext) => NodeId
     )(rule, handlerContext);
 
     this.valueKeyToNodeId.set(valueKey, nodeId);
