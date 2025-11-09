@@ -241,6 +241,15 @@ export class SimpleFAM {
         break;
       }
 
+      case "FIXED_VALUE": {
+        const targetAccountId = rule.ref ?? accountId;
+        const prevPeriodId = this.resolvePeriodId(context.periodId, {
+          offset: -1,
+        });
+        nodeId = this.buildNode(prevPeriodId, targetAccountId);
+        break;
+      }
+
       case "REFERENCE": {
         nodeId = this.buildExpression(
           {
@@ -248,6 +257,34 @@ export class SimpleFAM {
             id: rule.ref,
           },
           context
+        );
+        break;
+      }
+
+      case "PROPORTIONATE": {
+        const driverAccount = rule.ref;
+        const prevPeriodId = this.resolvePeriodId(context.periodId, {
+          offset: -1,
+        });
+
+        const driverCurrent = this.buildNode(context.periodId, driverAccount);
+        const driverPrev = this.buildNode(prevPeriodId, driverAccount);
+        const basePrev = this.buildNode(prevPeriodId, accountId);
+
+        const ratioNode = makeTT(
+          this.registry,
+          driverCurrent,
+          driverPrev,
+          "DIV",
+          `${driverAccount}@${context.periodId}/prev`
+        );
+
+        nodeId = makeTT(
+          this.registry,
+          basePrev,
+          ratioNode,
+          "MUL",
+          `${accountId}@${context.periodId}:proportionate`
         );
         break;
       }

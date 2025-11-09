@@ -241,6 +241,8 @@ export interface Account {
   GlobalAccountID?: string | null;
   fs_type?: FsType | null;
   parent_id?: AccountId | null;
+  isCredit?: boolean | null;
+  ignoredForCf?: boolean | null;
 }
 
 export type PeriodId = string;
@@ -281,6 +283,8 @@ export type Rule =
   | { type: "GROWTH_RATE"; rate: number; ref: AccountId }
   | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
   | { type: "REFERENCE"; ref: AccountId }
+  | { type: "FIXED_VALUE"; ref?: AccountId }
+  | { type: "PROPORTIONATE"; ref: AccountId }
   | {
       type: "BALANCE_CHANGE";
       flows: Array<{

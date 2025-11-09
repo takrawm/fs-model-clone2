@@ -73,4 +73,56 @@ export const forecastRules: Record<AccountId, Rule> = {
       right: { type: "ACCOUNT", id: "income_tax" satisfies AccountId },
     },
   },
+  capex: {
+    type: "REFERENCE",
+    ref: "depreciation",
+  },
+  cash: {
+    type: "BALANCE_CHANGE",
+    flows: [],
+  },
+  account_receivable: {
+    type: "PROPORTIONATE",
+    ref: "revenue",
+  },
+  tangible_assets: {
+    type: "BALANCE_CHANGE",
+    flows: [
+      { ref: "capex" satisfies AccountId, sign: "PLUS" },
+      { ref: "depreciation" satisfies AccountId, sign: "MINUS" },
+    ],
+  },
+  assets_total: {
+    type: "CALCULATION",
+    expression: {
+      type: "ADD",
+      left: { type: "ACCOUNT", id: "cash" satisfies AccountId },
+      right: {
+        type: "ADD",
+        left: { type: "ACCOUNT", id: "account_receivable" satisfies AccountId },
+        right: { type: "ACCOUNT", id: "tangible_assets" satisfies AccountId },
+      },
+    },
+  },
+  account_payable: {
+    type: "GROWTH_RATE",
+    rate: 0.05,
+    ref: "account_payable",
+  },
+  bills_payable: {
+    type: "PROPORTIONATE",
+    ref: "cogs",
+  },
+  liabilities_total: {
+    type: "CALCULATION",
+    expression: {
+      type: "ADD",
+      left: { type: "ACCOUNT", id: "account_payable" satisfies AccountId },
+      right: { type: "ACCOUNT", id: "bills_payable" satisfies AccountId },
+    },
+  },
+  retained_earnings: {
+    type: "BALANCE_CHANGE",
+    flows: [{ ref: "net_income" satisfies AccountId, sign: "PLUS" }],
+  },
 };

@@ -7,6 +7,7 @@ import {
   seedActualValues,
   seedPeriods,
 } from "./data/seedData.ts";
+import type { AccountId } from "./model/types.ts";
 
 const fam = new SimpleFAM();
 fam.setAccounts(seedAccounts);
@@ -23,46 +24,55 @@ const forecastValues = forecastResult[forecastPeriodId]!;
 const previousPeriodId = decrementFiscalYear(forecastPeriodId);
 const actualPrevious = periodValues(previousPeriodId);
 
-// 結果表示
+const plAccounts = seedAccounts.filter((account) => account.fs_type === "PL");
+const kpiAccounts = plAccounts.filter((account) =>
+  /単価|数量/.test(account.AccountName ?? account.id)
+);
+const monetaryAccounts = plAccounts.filter(
+  (account) => !kpiAccounts.includes(account)
+);
+
 console.log(`\n=== ${forecastPeriodId} 予測結果 ===`);
-printKPI("商品単価", forecastValues.unit_price, "円");
-printKPI("販売数量", forecastValues.quantity, "個");
-printMoney("売上高", forecastValues.revenue);
-printMoney("売上原価", forecastValues.cogs);
-printMoney("売上総利益", forecastValues.gross_profit);
-printMoney("減価償却費", forecastValues.depreciation);
-printMoney("その他販管費", forecastValues.other_opex);
-printMoney("販管費合計", forecastValues.total_opex);
-printMoney("営業利益", forecastValues.operating_profit);
-printMoney("法人税等", forecastValues.income_tax);
-printMoney("当期純利益", forecastValues.net_income);
+for (const account of kpiAccounts) {
+  const unit = /数量/.test(account.AccountName ?? account.id) ? "個" : "円";
+  printKPI(account.AccountName, forecastValues[account.id], unit);
+}
+for (const account of monetaryAccounts) {
+  printMoney(account.AccountName, forecastValues[account.id]);
+}
 
 console.log(`\n=== ${previousPeriodId} 実績 vs ${forecastPeriodId} 予測 ===`);
-printComparison("売上高", actualPrevious.revenue, forecastValues.revenue);
-printComparison(
-  "営業利益",
-  actualPrevious.operating_profit,
-  forecastValues.operating_profit
-);
-printComparison(
-  "法人税等",
-  actualPrevious.income_tax,
-  forecastValues.income_tax
-);
-printComparison(
-  "当期純利益",
-  actualPrevious.net_income,
-  forecastValues.net_income
-);
+if (actualPrevious) {
+  const comparisonIds = new Set<AccountId>([
+    "revenue",
+    "operating_profit",
+    "income_tax",
+    "net_income",
+  ]);
+  const comparisonAccounts = monetaryAccounts.filter((account) =>
+    comparisonIds.has(account.id)
+  );
+  for (const account of comparisonAccounts) {
+    printComparison(
+      account.AccountName,
+      actualPrevious[account.id],
+      forecastValues[account.id]
+    );
+  }
+} else {
+  console.log("比較可能な実績データが見つかりません。");
+}
 
 // デバッグ用：AST構造を表示（コメント解除で確認可能）
 // fam.printAST();
 
-function periodValues(periodId: string): Record<string, number> {
+function periodValues(periodId: string): Record<string, number> | null {
+  const values = seedActualValues.filter(
+    (value) => value.periodId === periodId
+  );
+  if (!values.length) return null;
   return Object.fromEntries(
-    seedActualValues
-      .filter((value) => value.periodId === periodId)
-      .map((value) => [value.accountId, value.value])
+    values.map((value) => [value.accountId, value.value])
   );
 }
 
