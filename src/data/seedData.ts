@@ -1,4 +1,4 @@
-import type { Account, TimelinePeriod, Value } from "../model/types.ts";
+import type { Account, Period, Value } from "../model/types.ts";
 
 export const seedAccounts: Account[] = [
   {
@@ -139,42 +139,12 @@ export const seedAccounts: Account[] = [
   },
 ];
 
-export const seedPeriods: TimelinePeriod[] = [
-  //   { id: "FY2023", label: "FY2023", offset: -1 },
-  { id: "FY2024", label: "FY2024", offset: -1 },
-  { id: "FY2025", label: "FY2025", offset: 0 },
+export const seedPeriods: Period[] = [
+  { id: "FY2024", label: "FY2024", periodType: "ANNUAL" },
+  { id: "FY2025", label: "FY2025", periodType: "ANNUAL" },
 ];
 
 export const seedActualValues: Value[] = [
-  //   { accountId: "unit_price", periodId: "FY2023", value: 950, source: "ACTUAL" },
-  //   { accountId: "quantity", periodId: "FY2023", value: 480, source: "ACTUAL" },
-  //   { accountId: "revenue", periodId: "FY2023", value: 456000, source: "ACTUAL" },
-  //   { accountId: "cogs", periodId: "FY2023", value: 273600, source: "ACTUAL" },
-  //   {
-  //     accountId: "gross_profit",
-  //     periodId: "FY2023",
-  //     value: 182400,
-  //     source: "ACTUAL",
-  //   },
-  //   { accountId: "opex", periodId: "FY2023", value: 75000, source: "ACTUAL" },
-  //   {
-  //     accountId: "operating_profit",
-  //     periodId: "FY2023",
-  //     value: 107400,
-  //     source: "ACTUAL",
-  //   },
-  //   {
-  //     accountId: "income_tax",
-  //     periodId: "FY2023",
-  //     value: 32220,
-  //     source: "ACTUAL",
-  //   },
-  //   {
-  //     accountId: "net_income",
-  //     periodId: "FY2023",
-  //     value: 75180,
-  //     source: "ACTUAL",
-  //   },
   {
     accountId: "unit_price",
     periodId: "FY2025",

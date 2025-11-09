@@ -8,10 +8,10 @@ import type {
   ExpressionNode,
   NodeId,
   Op,
+  Period,
   PeriodId,
   PeriodReference,
   Rule,
-  TimelinePeriod,
   Value,
 } from "../model/types.ts";
 
@@ -43,7 +43,7 @@ export class SimpleFAM {
   private accounts: Map<AccountId, Account> = new Map();
 
   // 期間の定義とインデックス
-  private periods: TimelinePeriod[] = [];
+  private periods: Period[] = [];
   private periodIndexById: Map<PeriodId, number> = new Map();
 
   // 実績値と予測値
@@ -74,7 +74,7 @@ export class SimpleFAM {
   /**
    * 期間情報を設定します
    */
-  setPeriods(periods: TimelinePeriod[]) {
+  setPeriods(periods: Period[]) {
     this.periods = periods.slice();
     this.periodIndexById.clear();
     for (let i = 0; i < this.periods.length; i += 1) {
@@ -489,7 +489,7 @@ export class SimpleFAM {
     return account;
   }
 
-  private ensurePeriodById(periodId: PeriodId): TimelinePeriod {
+  private ensurePeriodById(periodId: PeriodId): Period {
     const index = this.getPeriodIndex(periodId);
     return this.periods[index];
   }
@@ -521,7 +521,7 @@ export class SimpleFAM {
   }
 
   private generateCashFlowAccounts(
-    period: TimelinePeriod,
+    period: Period,
     output: Record<PeriodId, Record<AccountId, number>>
   ) {
     const periodValues = output[period.id];
@@ -568,13 +568,12 @@ export class SimpleFAM {
     }
   }
 
-  private createNextPeriod(latest: TimelinePeriod): TimelinePeriod {
+  private createNextPeriod(latest: Period): Period {
     const nextId = this.incrementPeriodId(latest.id);
-    const baseOffset = latest.offset ?? this.getPeriodIndex(latest.id);
     return {
       id: nextId,
       label: nextId,
-      offset: baseOffset + 1,
+      periodType: latest.periodType,
     };
   }
 
@@ -587,7 +586,7 @@ export class SimpleFAM {
   }
 
   private generateBalanceChangeCashFlows(
-    period: TimelinePeriod,
+    period: Period,
     output: Record<PeriodId, Record<AccountId, number>>
   ) {
     const periodValues = output[period.id];
@@ -624,7 +623,7 @@ export class SimpleFAM {
   }
 
   private summarizeCashFlows(
-    period: TimelinePeriod,
+    period: Period,
     output: Record<PeriodId, Record<AccountId, number>>
   ) {
     const periodValues = output[period.id];
@@ -651,7 +650,7 @@ export class SimpleFAM {
   }
 
   private updateCashFromCashFlows(
-    period: TimelinePeriod,
+    period: Period,
     output: Record<PeriodId, Record<AccountId, number>>
   ) {
     const periodValues = output[period.id];

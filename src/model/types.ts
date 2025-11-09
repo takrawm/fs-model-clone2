@@ -247,10 +247,12 @@ export interface Account {
 
 export type PeriodId = string;
 
-export interface TimelinePeriod {
+export type PeriodType = "ANNUAL" | "SEMI-ANNUAL" | "QUARTELY" | "MONTHLY";
+
+export interface Period {
   id: PeriodId;
   label?: string;
-  offset?: number;
+  periodType: PeriodType;
 }
 
 export interface ComputeOptions {
