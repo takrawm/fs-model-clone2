@@ -2,17 +2,15 @@
 
 import { SimpleFAM } from "./fam/simpleFam.ts";
 import { forecastRules } from "./data/forecastRules.ts";
-import {
-  seedAccounts,
-  seedActualValues,
-  seedPeriods,
-} from "./data/seedData.ts";
+import { seedAccounts } from "./data/seedAccountData.ts";
+import { seedPeriods } from "./data/seedPeriodData.ts";
+import { seedActualValues } from "./data/seedValueData.ts";
 import type { AccountId } from "./model/types.ts";
 
 const fam = new SimpleFAM();
 fam.setAccounts(seedAccounts);
 fam.setPeriods(seedPeriods);
-fam.loadActuals(seedActualValues);
+fam.loadInputData(seedActualValues);
 fam.setRules(forecastRules);
 
 // 既存期間の次年度を自動生成して予測

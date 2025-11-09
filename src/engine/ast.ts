@@ -1,7 +1,7 @@
 // src/engine/ast.ts
 
 import { NodeRegistry } from "../model/registry.ts";
-import type { Node, NodeId, Op } from "../model/types.ts";
+import type { NodeId, Op } from "../model/types.ts";
 
 /**
  * ASTエンジン
@@ -64,6 +64,7 @@ export function makeFF(
   // ノードオブジェクトを作成してレジストリに登録
   reg.add({
     id,
+    type: "FF",
     value,
     label,
   });
@@ -124,6 +125,7 @@ export function makeTT(
   // ノードオブジェクトを作成してレジストリに登録
   reg.add({
     id,
+    type: "TT",
     ref1: left,
     ref2: right,
     operator,
@@ -184,8 +186,10 @@ function topoSort(reg: NodeRegistry, roots: NodeId[]): NodeId[] {
     reachable.add(id);
     const node = reg.get(id);
     // 子ノードがあれば再帰的に訪問
-    if (node.ref1) visit(node.ref1);
-    if (node.ref2) visit(node.ref2);
+    if (node.type === "TT") {
+      visit(node.ref1);
+      visit(node.ref2);
+    }
   };
   for (const root of roots) {
     visit(root);
@@ -209,13 +213,11 @@ function topoSort(reg: NodeRegistry, roots: NodeId[]): NodeId[] {
   // エッジの向きを逆にして考えます
   for (const id of nodes) {
     const node = reg.get(id);
-    if (node.ref1) {
+    if (node.type === "TT") {
       // このノード(id)は ref1 に依存している
       // つまり ref1 → id というエッジがある
       inDegree.set(id, (inDegree.get(id) || 0) + 1);
       children.get(node.ref1)!.push(id);
-    }
-    if (node.ref2) {
       inDegree.set(id, (inDegree.get(id) || 0) + 1);
       children.get(node.ref2)!.push(id);
     }
@@ -316,13 +318,13 @@ export function evalTopo(
   for (const id of order) {
     const node = reg.get(id);
 
-    if (node.value !== undefined) {
+    if (node.type === "FF") {
       // FFノード: 値をそのまま記録
       values.set(id, node.value);
     } else {
       // TTノード: 左右の子の値を取得して演算
-      const leftValue = values.get(node.ref1!);
-      const rightValue = values.get(node.ref2!);
+      const leftValue = values.get(node.ref1);
+      const rightValue = values.get(node.ref2);
 
       // 子の値が取得できない場合はエラー
       // （トポロジカルソートが正しければ、この状況は発生しないはず）

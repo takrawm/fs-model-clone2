@@ -54,19 +54,38 @@ export type FsType = "PL" | "BS" | "CF" | "PP&E" | "OTHER";
  *
  * label プロパティは、デバッグやログ出力の際にノードの内容を
  * 人間が理解できる形で表示するために使用されます。
+ *
+ * Discriminated Unionを使用することで、型安全性を向上させています。
+ * typeプロパティにより、TypeScriptが自動的にノードの種類を判別し、
+ * 適切なプロパティにアクセスできることを保証します。
  */
-export interface Node {
+export type Node = FFNode | TTNode;
+
+/**
+ * FFノード（終端ノード）
+ *
+ * 値を直接持つノードです。計算のツリー構造における「葉」に相当し、
+ * それ以上分解できない最小単位です。
+ */
+export interface FFNode {
   id: NodeId;
+  type: "FF";
+  value: number;
+  label?: string;
+}
 
-  // FFノードの場合のみ設定される
-  value?: number;
-
-  // TTノードの場合のみ設定される
-  ref1?: NodeId;
-  ref2?: NodeId;
-  operator?: Op;
-
-  // デバッグ用のラベル（例: "revenue(単価×数量)"）
+/**
+ * TTノード（二項演算ノード）
+ *
+ * 2つの子ノードを演算で結合するノードです。計算のツリー構造における
+ * 「枝」に相当し、下位の計算結果を組み合わせて新しい値を生成します。
+ */
+export interface TTNode {
+  id: NodeId;
+  type: "TT";
+  ref1: NodeId;
+  ref2: NodeId;
+  operator: Op;
   label?: string;
 }
 
@@ -247,11 +266,15 @@ export interface Account {
 
 export type PeriodId = string;
 
-export type PeriodType = "ANNUAL" | "SEMI-ANNUAL" | "QUARTELY" | "MONTHLY";
+export type PeriodType = "ANNUAL" | "MONTHLY";
 
 export interface Period {
   id: PeriodId;
+  year: number; // 暦年（2023, 2024など）
+  month: number; // 月（1-12）
   label?: string;
+  isFiscalYearEnd: boolean; // この期間が会計年度末かどうか
+  fiscalYear: number; // 会計年度（例：2023年3月期なら2023）
   periodType: PeriodType;
 }
 
@@ -259,13 +282,28 @@ export interface ComputeOptions {
   periodsToGenerate?: number;
 }
 
-export type ValueSource = "ACTUAL" | "FORECAST";
+/**
+ * 値のキー文字列
+ *
+ * 期間と科目の組み合わせを一意に識別するためのキー文字列です。
+ * 形式: "${periodId}::${accountId}"
+ * 例: "FY2025::unit_price", "FY2026::revenue"
+ *
+ * テンプレートリテラル型により、この形式であることが型レベルで保証されます。
+ */
+export type ValueKeyString = `${PeriodId}::${AccountId}`;
 
+/**
+ * 入力データ
+ *
+ * シードデータや外部から取り込んだデータを表現します。
+ * isInputがtrueの場合、この値は入力値として扱われます。
+ */
 export interface Value {
   accountId: AccountId;
   periodId: PeriodId;
   value: number;
-  source?: ValueSource;
+  isInput: boolean;
 }
 
 /**

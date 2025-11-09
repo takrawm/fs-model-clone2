@@ -13,7 +13,9 @@ import type {
   PeriodReference,
   Rule,
   Value,
+  ValueKeyString,
 } from "../model/types.ts";
+import { createPeriod } from "../utils/periodUtils.ts";
 
 /**
  * 簡素版FAM（Financial Analysis Model）
@@ -46,9 +48,9 @@ export class SimpleFAM {
   private periods: Period[] = [];
   private periodIndexById: Map<PeriodId, number> = new Map();
 
-  // 実績値と予測値
-  private actualValues: Map<string, number> = new Map();
-  private forecastValues: Map<string, number> = new Map();
+  // 登録済みの値（入力データと計算結果の両方を含む）
+  // キーは "${periodId}::${accountId}" の形式（例: "FY2025::unit_price"）
+  private values: Map<ValueKeyString, number> = new Map();
 
   // 計算ルールを保持
   private rules: Record<AccountId, Rule> = {};
@@ -85,20 +87,19 @@ export class SimpleFAM {
   }
 
   /**
-   * 実績データを読み込みます
+   * 入力データを読み込みます
    *
    * values は、(accountId, periodId) と値の組を持つ配列です。
-   * source が未指定の場合は ACTUAL とみなします。
+   * シードデータや外部から取り込んだデータを登録します。
    */
-  loadActuals(values: Value[]) {
+  loadInputData(values: Value[]) {
     for (const item of values) {
       this.ensureAccountById(item.accountId);
       this.ensurePeriodById(item.periodId);
-      // `${periodId}::${accountId}`返す
-      const key = this.valueKey(item.periodId, item.accountId);
-      this.actualValues.set(key, item.value);
+      const key = this.createValueKeyString(item.periodId, item.accountId);
+      this.values.set(key, item.value);
     }
-    console.log("実績データを読み込みました:", values.length, "件");
+    console.log("入力データを読み込みました:", values.length, "件");
   }
 
   /**
@@ -124,10 +125,6 @@ export class SimpleFAM {
    * 新たに生成された期間IDをキーに持つ結果オブジェクトを返します。
    */
   compute(): Record<PeriodId, Record<AccountId, number>> {
-    if (!this.periods.length) throw new Error("期間が設定されていません");
-    if (!Object.keys(this.rules).length)
-      throw new Error("ルールが設定されていません");
-
     const latestPeriod = this.periods[this.periods.length - 1];
     const nextPeriod = this.createNextPeriod(latestPeriod);
     this.periods.push(nextPeriod);
@@ -151,7 +148,7 @@ export class SimpleFAM {
       const nodeId = this.buildNode(nextPeriod.id, accountId);
       const result = evalTopo(this.registry, [nodeId]);
       const value = result.get(nodeId) ?? 0;
-      this.setForecastValue(nextPeriod.id, accountId, value);
+      this.setValue(nextPeriod.id, accountId, value);
       output[nextPeriod.id][accountId] = Math.round(value);
       console.log(`    > ${accountId}@${nextPeriod.id} = ${value.toFixed(2)}`);
     }
@@ -182,35 +179,24 @@ export class SimpleFAM {
    * @returns 構築されたASTノードのID
    */
   private buildNode(periodId: PeriodId, accountId: AccountId): NodeId {
-    const key = this.valueKey(periodId, accountId);
+    const key = this.createValueKeyString(periodId, accountId);
     if (this.accountNodes.has(key)) return this.accountNodes.get(key)!;
     if (this.visiting.has(key))
       throw new Error(`循環参照が検出されました: ${accountId}@${periodId}`);
     this.visiting.add(key);
 
     const account = this.ensureAccountById(accountId);
-    const timelinePeriod = this.ensurePeriodById(periodId);
+    const period = this.ensurePeriodById(periodId);
     const accountLabel = account.AccountName ?? account.id;
-    const periodLabel = timelinePeriod.label ?? periodId;
+    const periodLabel = period.label ?? periodId;
 
-    const actualValue = this.actualValues.get(key);
-    if (actualValue != null) {
+    // 登録済みの値を確認
+    const registeredValue = this.values.get(key);
+    if (registeredValue != null) {
       const nodeId = makeFF(
         this.registry,
-        actualValue,
-        `${accountLabel}@${periodLabel}[Actual]`
-      );
-      this.accountNodes.set(key, nodeId);
-      this.visiting.delete(key);
-      return nodeId;
-    }
-
-    const cachedForecast = this.forecastValues.get(key);
-    if (cachedForecast != null) {
-      const nodeId = makeFF(
-        this.registry,
-        cachedForecast,
-        `${accountLabel}@${periodLabel}[Forecast~cached]`
+        registeredValue,
+        `${accountLabel}@${periodLabel}[Registered]`
       );
       this.accountNodes.set(key, nodeId);
       this.visiting.delete(key);
@@ -500,24 +486,20 @@ export class SimpleFAM {
     return index;
   }
 
-  private valueKey(periodId: PeriodId, accountId: AccountId): string {
-    return `${periodId}::${accountId}`;
+  private createValueKeyString(
+    periodId: PeriodId,
+    accountId: AccountId
+  ): ValueKeyString {
+    return `${periodId}::${accountId}` as ValueKeyString;
   }
 
-  private setForecastValue(
-    periodId: PeriodId,
-    accountId: AccountId,
-    value: number
-  ) {
-    this.forecastValues.set(this.valueKey(periodId, accountId), value);
+  private setValue(periodId: PeriodId, accountId: AccountId, value: number) {
+    this.values.set(this.createValueKeyString(periodId, accountId), value);
   }
 
   private getHistoricalValue(periodId: PeriodId, accountId: AccountId): number {
-    const key = this.valueKey(periodId, accountId);
-    if (this.forecastValues.has(key)) return this.forecastValues.get(key)!;
-    const actual = this.actualValues.get(key);
-    if (actual != null) return actual;
-    return 0;
+    const key = this.createValueKeyString(periodId, accountId);
+    return this.values.get(key) ?? 0;
   }
 
   private generateCashFlowAccounts(
@@ -569,20 +551,29 @@ export class SimpleFAM {
   }
 
   private createNextPeriod(latest: Period): Period {
-    const nextId = this.incrementPeriodId(latest.id);
-    return {
-      id: nextId,
-      label: nextId,
-      periodType: latest.periodType,
-    };
-  }
+    let nextYear = latest.year;
+    let nextMonth = latest.month;
 
-  private incrementPeriodId(currentId: PeriodId): PeriodId {
-    const match = currentId.match(/^(.*?)(\d+)$/);
-    if (!match) return `${currentId}_next`;
-    const [, prefix, numberPart] = match;
-    const nextNumber = String(Number(numberPart) + 1);
-    return `${prefix}${nextNumber}`;
+    switch (latest.periodType) {
+      case "ANNUAL":
+        // 年次の場合は年を1つ進める
+        nextYear = latest.year + 1;
+        // monthはFISCAL_YEAR_ENDのまま（createPeriodが自動設定）
+        break;
+
+      case "MONTHLY":
+        // 月次の場合は月を1つ進める
+        nextMonth = latest.month + 1;
+        if (nextMonth > 12) {
+          nextMonth = 1;
+          nextYear = latest.year + 1;
+        }
+        break;
+      default:
+        throw new Error(`未対応のperiodType: ${latest.periodType}`);
+    }
+
+    return createPeriod(nextYear, nextMonth, latest.periodType);
   }
 
   private generateBalanceChangeCashFlows(
@@ -667,7 +658,7 @@ export class SimpleFAM {
     };
 
     periodValues["cash"] = newCash;
-    this.setForecastValue(period.id, "cash", newCash);
+    this.setValue(period.id, "cash", newCash);
   }
 
   /**
@@ -680,7 +671,7 @@ export class SimpleFAM {
   printAST() {
     console.log("\n=== AST構造 ===");
     for (const node of this.registry.all()) {
-      if (node.value !== undefined) {
+      if (node.type === "FF") {
         console.log(`${node.id}: FF(${node.value}) - ${node.label}`);
       } else {
         console.log(
