@@ -156,6 +156,11 @@ export class SimpleFAM {
       console.log(`    > ${accountId}@${nextPeriod.id} = ${value.toFixed(2)}`);
     }
 
+    this.generateCashFlowAccounts(nextPeriod, output);
+    this.generateBalanceChangeCashFlows(nextPeriod, output);
+    this.summarizeCashFlows(nextPeriod, output);
+    this.updateCashFromCashFlows(nextPeriod, output);
+
     console.log("予測計算を完了しました");
     return output;
   }
@@ -507,6 +512,62 @@ export class SimpleFAM {
     this.forecastValues.set(this.valueKey(periodId, accountId), value);
   }
 
+  private getHistoricalValue(periodId: PeriodId, accountId: AccountId): number {
+    const key = this.valueKey(periodId, accountId);
+    if (this.forecastValues.has(key)) return this.forecastValues.get(key)!;
+    const actual = this.actualValues.get(key);
+    if (actual != null) return actual;
+    return 0;
+  }
+
+  private generateCashFlowAccounts(
+    period: TimelinePeriod,
+    output: Record<PeriodId, Record<AccountId, number>>
+  ) {
+    const periodValues = output[period.id];
+    if (!periodValues) return;
+
+    for (const [accountId, rule] of Object.entries(this.rules)) {
+      if (rule.type !== "BALANCE_CHANGE") continue;
+      const balanceAccount = this.accounts.get(accountId);
+      if (!balanceAccount) continue;
+      if (balanceAccount.fs_type !== "BS") continue;
+      if (balanceAccount.ignoredForCf) continue;
+
+      const flows = rule.flows ?? [];
+      for (const flow of flows) {
+        const flowAccountId = flow.ref;
+        const flowValue = periodValues[flowAccountId];
+        if (flowValue == null) continue;
+
+        const sourceAccount = this.accounts.get(flowAccountId);
+        if (!sourceAccount) continue;
+
+        const cfAccountId = `${flowAccountId}_cf`;
+        if (!this.accounts.has(cfAccountId)) {
+          this.accounts.set(cfAccountId, {
+            id: cfAccountId,
+            AccountName: `${sourceAccount.AccountName ?? flowAccountId}（CF）`,
+            GlobalAccountID: null,
+            fs_type: "CF",
+          });
+        }
+
+        const isCredit = balanceAccount.isCredit ?? false;
+        const sign = flow.sign ?? "PLUS";
+
+        let adjusted = flowValue;
+        if (isCredit) {
+          adjusted = sign === "PLUS" ? flowValue : -flowValue;
+        } else {
+          adjusted = sign === "PLUS" ? -flowValue : flowValue;
+        }
+
+        periodValues[cfAccountId] = Math.round(adjusted);
+      }
+    }
+  }
+
   private createNextPeriod(latest: TimelinePeriod): TimelinePeriod {
     const nextId = this.incrementPeriodId(latest.id);
     const baseOffset = latest.offset ?? this.getPeriodIndex(latest.id);
@@ -523,6 +584,91 @@ export class SimpleFAM {
     const [, prefix, numberPart] = match;
     const nextNumber = String(Number(numberPart) + 1);
     return `${prefix}${nextNumber}`;
+  }
+
+  private generateBalanceChangeCashFlows(
+    period: TimelinePeriod,
+    output: Record<PeriodId, Record<AccountId, number>>
+  ) {
+    const periodValues = output[period.id];
+    if (!periodValues) return;
+
+    const prevPeriodId = this.resolvePeriodId(period.id, { offset: -1 });
+
+    for (const [accountId, account] of this.accounts.entries()) {
+      if (account.fs_type !== "BS") continue;
+      if (account.ignoredForCf) continue;
+      const rule = this.rules[accountId];
+      if (rule?.type === "BALANCE_CHANGE") continue;
+
+      const currentValue = periodValues[accountId] ?? 0;
+      const prevValue = this.getHistoricalValue(prevPeriodId, accountId);
+      const diff = currentValue - prevValue;
+      if (diff === 0) continue;
+
+      const cfAccountId = `${accountId}_cf`;
+      if (!this.accounts.has(cfAccountId)) {
+        this.accounts.set(cfAccountId, {
+          id: cfAccountId,
+          AccountName: `${account.AccountName ?? accountId}の増減(CF)`,
+          GlobalAccountID: null,
+          fs_type: "CF",
+        });
+      }
+
+      const existing = periodValues[cfAccountId] ?? 0;
+      const isCredit = account.isCredit ?? false;
+      const adjusted = isCredit ? diff : -diff;
+      periodValues[cfAccountId] = Math.round(existing + adjusted);
+    }
+  }
+
+  private summarizeCashFlows(
+    period: TimelinePeriod,
+    output: Record<PeriodId, Record<AccountId, number>>
+  ) {
+    const periodValues = output[period.id];
+    if (!periodValues) return;
+
+    let sum = 0;
+    for (const [accountId, value] of Object.entries(periodValues)) {
+      const account = this.accounts.get(accountId);
+      if (account?.fs_type === "CF" && accountId !== "cash_change_cf") {
+        sum += value ?? 0;
+      }
+    }
+
+    if (!this.accounts.has("cash_change_cf")) {
+      this.accounts.set("cash_change_cf", {
+        id: "cash_change_cf",
+        AccountName: "現預金増減",
+        GlobalAccountID: null,
+        fs_type: "CF",
+      });
+    }
+
+    periodValues["cash_change_cf"] = Math.round(sum);
+  }
+
+  private updateCashFromCashFlows(
+    period: TimelinePeriod,
+    output: Record<PeriodId, Record<AccountId, number>>
+  ) {
+    const periodValues = output[period.id];
+    if (!periodValues) return;
+
+    const prevPeriodId = this.resolvePeriodId(period.id, { offset: -1 });
+    const previousCash = this.getHistoricalValue(prevPeriodId, "cash");
+    const cashChange = periodValues["cash_change_cf"] ?? 0;
+    const newCash = Math.round(previousCash + cashChange);
+
+    this.rules["cash"] = {
+      type: "BALANCE_CHANGE",
+      flows: [{ ref: "cash_change_cf", sign: "PLUS" }],
+    };
+
+    periodValues["cash"] = newCash;
+    this.setForecastValue(period.id, "cash", newCash);
   }
 
   /**
