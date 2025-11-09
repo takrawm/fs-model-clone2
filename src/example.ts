@@ -28,9 +28,23 @@ const plAccounts = seedAccounts.filter((account) => account.fs_type === "PL");
 const kpiAccounts = plAccounts.filter((account) =>
   /単価|数量/.test(account.AccountName ?? account.id)
 );
-const monetaryAccounts = plAccounts.filter(
+const monetaryAccounts = seedAccounts.filter(
   (account) => !kpiAccounts.includes(account)
 );
+
+if (actualPrevious) {
+  console.log(`\n=== ${previousPeriodId} 実績 ===`);
+  for (const account of kpiAccounts) {
+    const unit = /数量/.test(account.AccountName ?? account.id) ? "個" : "円";
+    printKPI(account.AccountName, actualPrevious[account.id], unit);
+  }
+  for (const account of monetaryAccounts) {
+    printMoney(account.AccountName, actualPrevious[account.id]);
+  }
+} else {
+  console.log(`\n=== ${previousPeriodId} 実績 ===`);
+  console.log("実績データが見つかりません。");
+}
 
 console.log(`\n=== ${forecastPeriodId} 予測結果 ===`);
 for (const account of kpiAccounts) {

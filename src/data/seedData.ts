@@ -78,12 +78,6 @@ export const seedAccounts: Account[] = [
     AccountName: "現預金",
     GlobalAccountID: null,
     fs_type: "BS",
-  },
-  {
-    id: "cash",
-    AccountName: "現預金",
-    GlobalAccountID: null,
-    fs_type: "BS",
     isCredit: false,
     ignoredForCf: true,
   },
@@ -235,7 +229,7 @@ export const seedActualValues: Value[] = [
   {
     accountId: "capex",
     periodId: "FY2025",
-    value: 5000,
+    value: 10000,
     source: "ACTUAL",
   },
   {

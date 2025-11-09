@@ -74,8 +74,9 @@ export const forecastRules: Record<AccountId, Rule> = {
     },
   },
   capex: {
-    type: "REFERENCE",
-    ref: "depreciation",
+    type: "PERCENTAGE",
+    percentage: 0.2,
+    ref: "cogs" satisfies AccountId,
   },
   cash: {
     type: "BALANCE_CHANGE",

@@ -314,30 +314,52 @@ export class SimpleFAM {
       }
 
       case "BALANCE_CHANGE": {
-        const expr = rule.flows.reduce<ExpressionNode | null>((acc, flow) => {
-          const baseNode: ExpressionNode = {
-            type: "ACCOUNT",
-            id: flow.ref,
-          };
-          const signedNode =
-            flow.sign === "PLUS"
-              ? baseNode
-              : ({
-                  type: "MUL",
-                  left: baseNode,
-                  right: { type: "NUMBER", value: -1 },
-                } as ExpressionNode);
-          if (!acc) return signedNode;
-          return {
-            type: "ADD",
-            left: acc,
-            right: signedNode,
-          };
-        }, null);
+        // 1. 前期のPeriodIDを取得
+        const prevPeriodId = this.resolvePeriodId(context.periodId, {
+          offset: -1,
+        });
 
-        nodeId = this.buildExpression(
-          expr ?? { type: "NUMBER", value: 0 },
+        // 2. この勘定(accountId)の前期末残高のノードを構築
+        const prevBalanceNodeId = this.buildNode(prevPeriodId, accountId);
+
+        // 3. フロー（当期増減）の合計式を構築 (ここは元のロジック)
+        const flowsExpr = rule.flows.reduce<ExpressionNode | null>(
+          (acc, flow) => {
+            const baseNode: ExpressionNode = {
+              type: "ACCOUNT",
+              id: flow.ref,
+            };
+            const signedNode =
+              flow.sign === "PLUS"
+                ? baseNode
+                : ({
+                    type: "MUL",
+                    left: baseNode,
+                    right: { type: "NUMBER", value: -1 },
+                  } as ExpressionNode);
+            if (!acc) return signedNode;
+            return {
+              type: "ADD",
+              left: acc,
+              right: signedNode,
+            };
+          },
+          null
+        );
+
+        // 4. フロー合計のノードを構築
+        const flowsNodeId = this.buildExpression(
+          flowsExpr ?? { type: "NUMBER", value: 0 },
           context
+        );
+
+        // 5. 最終的なノードID = 前期末残高ノード + フロー合計ノード
+        nodeId = makeTT(
+          this.registry,
+          prevBalanceNodeId, // 前期末残高
+          flowsNodeId, // 当期増減
+          "ADD", // 加算
+          `${accountId}@${context.periodId}:balance_change`
         );
         break;
       }
