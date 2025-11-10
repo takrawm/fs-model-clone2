@@ -106,7 +106,7 @@ export interface TTNode {
  *    形成されます。periodプロパティで、当期の値を参照するか、前期の実績値を
  *    参照するかを指定できます。
  *    例: { type: 'ACCOUNT', id: 'revenue' }
- *    例: { type: 'ACCOUNT', id: 'revenue', period: 'PREV' }
+ *    例: { type: 'ACCOUNT', id: 'revenue', period: { offset: -1 } }
  *
  * 3. 二項演算: 2つの式を演算子で結合
  *    左右の部分式（これも ExpressionNode）を演算で結合します。
@@ -162,12 +162,12 @@ export interface NumberNode {
  *
  * periodプロパティにより、参照のタイミングを制御できます。
  *
- * - 'CURRENT' または省略: 当期の値を参照
+ * - 省略または { offset: 0 }: 当期の値を参照
  *   参照先の科目が今回の計算で求める値を使用します。
  *   これにより、科目間の依存関係の連鎖が形成されます。
  *   例: 売上総利益が売上高を参照する場合、売上高が先に計算される必要があります。
  *
- * - 'PREV': 前期の実績値を参照
+ * - { offset: -1 }: 前期の実績値を参照
  *   シードデータのactualsに格納されている前期の実績値を使用します。
  *   これは計算の起点となり、それ以上依存先を辿る必要がありません。
  *   例: 「前期比110%」という成長率を適用する場合、前期の値が必要です。
@@ -177,20 +177,27 @@ export interface NumberNode {
  * 「今期の売上 = 前期の売上 × 1.1」という計算の場合：
  * {
  *   type: 'MUL',
- *   left: { type: 'ACCOUNT', id: 'revenue', period: 'PREV' },
+ *   left: { type: 'ACCOUNT', id: 'revenue', period: { offset: -1 } },
  *   right: { type: 'NUMBER', value: 1.1 }
  * }
  */
-export type PeriodReference =
-  | "CURRENT"
-  | "PREV"
-  | PeriodId
-  | { offset: number };
+
+/**
+ * 相対参照（現在使用中）
+ * 現在の期間からのオフセットで期間を指定
+ */
+export type RelativePeriodReference = { offset: number };
+
+/**
+ * 絶対参照（将来用）
+ * 特定期間IDを直接指定
+ */
+export type AbsolutePeriodReference = PeriodId;
 
 export interface AccountNode {
   type: "ACCOUNT";
   id: AccountId;
-  period?: PeriodReference;
+  period?: RelativePeriodReference;
 }
 
 /**

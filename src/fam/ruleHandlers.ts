@@ -7,7 +7,7 @@ import type {
   ExpressionNode,
   NodeId,
   PeriodId,
-  PeriodReference,
+  RelativePeriodReference,
   Rule,
 } from "../model/types.ts";
 
@@ -24,7 +24,7 @@ export interface RuleHandlerContext {
   nodeRegistry: NodeRegistry;
   buildNode: (periodId: PeriodId, accountId: AccountId) => NodeId;
   buildExpression: (expr: ExpressionNode) => NodeId;
-  resolvePeriodId: (reference?: PeriodReference) => PeriodId;
+  resolvePeriodId: (reference?: RelativePeriodReference) => PeriodId;
 }
 
 /**
@@ -121,11 +121,13 @@ export const handleReference: ReferenceRuleHandler = (rule, context) => {
  * ドライバー科目の変化率に応じて比例計算します
  */
 export const handleProportionate: ProportionateRuleHandler = (
+  // type rule = { type: "PROPORTIONATE"; ref: AccountId }
   rule,
   context
 ) => {
   const { accountId, periodId, nodeRegistry, buildNode, resolvePeriodId } =
     context;
+  // "revenue"など
   const driverAccount = rule.ref;
   const prevPeriodId = resolvePeriodId({
     offset: -1,
@@ -160,7 +162,7 @@ export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
   const { accountId, buildExpression } = context;
   return buildExpression({
     type: "MUL",
-    left: { type: "ACCOUNT", id: accountId, period: "PREV" },
+    left: { type: "ACCOUNT", id: accountId, period: { offset: -1 } },
     right: { type: "NUMBER", value: 1 + rule.rate },
   });
 };

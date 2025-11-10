@@ -10,7 +10,7 @@ import type {
   Op,
   Period,
   PeriodId,
-  PeriodReference,
+  RelativePeriodReference,
   Rule,
   Value,
   ValueKeyString,
@@ -213,6 +213,9 @@ export class SimpleFAM {
     const handlerContext: RuleHandlerContext = {
       periodId,
       accountId,
+      // このbuildNodeメソッドはインスタンスメソッドなので、
+      // このメソッドが実行されている間、thisはSimpleFAMのインスタンスを指しています。
+      // アロー関数はこのthisをキャプチャして保持します。
       nodeRegistry: this.nodeRegistry,
       buildNode: (pId, aId) => this.buildNode(pId, aId),
       buildExpression: (expr) =>
@@ -232,9 +235,13 @@ export class SimpleFAM {
 
     // ruleHandlerはruleHandlers[rule.type]から取得したハンドラー関数
     //
-    const nodeId = (
-      ruleHandler as (rule: Rule, context: RuleHandlerContext) => NodeId
-    )(rule, handlerContext);
+    const nodeId = // rule.type === "PROPORTIONATE"のとき
+      // {type: "PROPORTIONATE",ref: "revenue"  // ドライバー科目のID}
+
+      (ruleHandler as (rule: Rule, context: RuleHandlerContext) => NodeId)(
+        rule,
+        handlerContext
+      );
 
     this.valueKeyToNodeId.set(valueKey, nodeId);
     this.visiting.delete(valueKey);
@@ -320,13 +327,10 @@ export class SimpleFAM {
 
   private resolvePeriodId(
     basePeriodId: PeriodId,
-    reference?: PeriodReference
+    reference?: RelativePeriodReference
   ): PeriodId {
-    if (!reference || reference === "CURRENT") return basePeriodId;
-    if (reference === "PREV") return this.findPeriodByOffset(basePeriodId, -1);
-    if (typeof reference === "string")
-      return this.ensurePeriodById(reference).id;
-    return this.findPeriodByOffset(basePeriodId, reference.offset ?? 0);
+    if (!reference) return basePeriodId;
+    return this.findPeriodByOffset(basePeriodId, reference.offset);
   }
 
   private findPeriodByOffset(basePeriodId: PeriodId, offset: number): PeriodId {
