@@ -123,6 +123,15 @@ export const forecastRules: Record<AccountId, Rule> = {
     type: "BALANCE_CHANGE",
     flowAccounts: [{ ref: "net_income" satisfies AccountId, sign: "PLUS" }],
   },
+  // 負債・純資産合計（貸借一致確認用）
+  equity_and_liabilities_total: {
+    type: "CALCULATION",
+    expression: {
+      type: "ADD",
+      left: { type: "ACCOUNT", id: "liabilities_total" satisfies AccountId },
+      right: { type: "ACCOUNT", id: "retained_earnings" satisfies AccountId },
+    },
+  },
   // 以下を末尾に追加
   cash_change_cf: {
     type: "INPUT", // このルールは動的に上書きされる

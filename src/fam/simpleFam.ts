@@ -526,6 +526,12 @@ export class SimpleFAM {
       expression: cfSummaryExpr,
     };
 
+    // 5. cashのルールをcash_change_cfを含むように更新
+    this.rules["cash"] = {
+      type: "BALANCE_CHANGE",
+      flowAccounts: [{ ref: "cash_change_cf", sign: "PLUS" }],
+    };
+
     console.log("  - CF計算ルール生成完了。");
   }
 
