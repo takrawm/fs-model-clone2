@@ -195,29 +195,32 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
 ) => {
   const { accountId, buildFormula } = context;
 
-  // フロー（当期増減）の合計式を構築
-  const flowsExpr = rule.flows.reduce<FormulaNode | null>((acc, flow) => {
-    const baseNode: FormulaNode = {
-      type: "ACCOUNT",
-      id: flow.ref,
-    };
-    const signedNode: FormulaNode =
-      flow.sign === "PLUS"
-        ? baseNode
-        : {
-            type: "MUL",
-            left: baseNode,
-            right: { type: "NUMBER", value: -1 },
-          };
-    if (!acc) return signedNode;
-    return {
-      type: "ADD",
-      left: acc,
-      right: signedNode,
-    };
-  }, null);
+  // flowAccounts（当期増減）の合計式を構築
+  const flowAccountsTotal = rule.flowAccounts.reduce<FormulaNode | null>(
+    (acc, flow) => {
+      const baseNode: FormulaNode = {
+        type: "ACCOUNT",
+        id: flow.ref,
+      };
+      const signedNode: FormulaNode =
+        flow.sign === "PLUS"
+          ? baseNode
+          : {
+              type: "MUL",
+              left: baseNode,
+              right: { type: "NUMBER", value: -1 },
+            };
+      if (!acc) return signedNode;
+      return {
+        type: "ADD",
+        left: acc,
+        right: signedNode,
+      };
+    },
+    null
+  );
 
-  // 前期末残高 + フロー合計の式を構築
+  // 前期末残高 + flowAccounts合計の式を構築
   return buildFormula({
     type: "ADD",
     left: {
@@ -225,7 +228,7 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
       id: accountId,
       period: { offset: -1 },
     },
-    right: flowsExpr ?? { type: "NUMBER", value: 0 },
+    right: flowAccountsTotal ?? { type: "NUMBER", value: 0 },
   });
 };
 

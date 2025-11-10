@@ -78,7 +78,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   cash: {
     type: "BALANCE_CHANGE",
-    flows: [],
+    flowAccounts: [],
   },
   account_receivable: {
     type: "PROPORTIONATE",
@@ -86,7 +86,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   tangible_assets: {
     type: "BALANCE_CHANGE",
-    flows: [
+    flowAccounts: [
       { ref: "capex" satisfies AccountId, sign: "PLUS" },
       { ref: "depreciation" satisfies AccountId, sign: "MINUS" },
     ],
@@ -121,6 +121,6 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   retained_earnings: {
     type: "BALANCE_CHANGE",
-    flows: [{ ref: "net_income" satisfies AccountId, sign: "PLUS" }],
+    flowAccounts: [{ ref: "net_income" satisfies AccountId, sign: "PLUS" }],
   },
 };

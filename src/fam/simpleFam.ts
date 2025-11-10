@@ -390,7 +390,7 @@ export class SimpleFAM {
       if (balanceAccount.fs_type !== "BS") continue;
       if (balanceAccount.ignoredForCf) continue;
 
-      const flows = rule.flows ?? [];
+      const flows = rule.flowAccounts ?? [];
       for (const flow of flows) {
         const flowAccountId = flow.ref;
         const flowValue = periodValues[flowAccountId];
@@ -528,7 +528,7 @@ export class SimpleFAM {
 
     this.rules["cash"] = {
       type: "BALANCE_CHANGE",
-      flows: [{ ref: "cash_change_cf", sign: "PLUS" }],
+      flowAccounts: [{ ref: "cash_change_cf", sign: "PLUS" }],
     };
 
     periodValues["cash"] = newCash;

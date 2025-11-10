@@ -330,7 +330,7 @@ export type Rule =
   | { type: "PROPORTIONATE"; ref: AccountId }
   | {
       type: "BALANCE_CHANGE";
-      flows: Array<{
+      flowAccounts: Array<{
         ref: AccountId;
         sign: "PLUS" | "MINUS";
       }>;
