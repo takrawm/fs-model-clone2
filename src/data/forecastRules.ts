@@ -123,4 +123,9 @@ export const forecastRules: Record<AccountId, Rule> = {
     type: "BALANCE_CHANGE",
     flowAccounts: [{ ref: "net_income" satisfies AccountId, sign: "PLUS" }],
   },
+  // 以下を末尾に追加
+  cash_change_cf: {
+    type: "INPUT", // このルールは動的に上書きされる
+    value: 0,
+  },
 };

@@ -257,6 +257,8 @@ export interface Account {
   parent_id?: AccountId | null;
   isCredit?: boolean | null;
   ignoredForCf?: boolean | null;
+  isCfBaseProfit?: boolean | null; // 1. CF計算の起点となる利益（例: net_income）
+  isCashAccount?: boolean | null; // 3. 現預金科目（例: cash）
 }
 
 export type PeriodId = string;

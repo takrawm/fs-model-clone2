@@ -66,6 +66,7 @@ export const seedAccounts: Account[] = [
     AccountName: "当期純利益",
     GlobalAccountID: null,
     fs_type: "PL",
+    isCfBaseProfit: true, // <- 1. 追加
   },
   {
     id: "capex",
@@ -80,6 +81,7 @@ export const seedAccounts: Account[] = [
     fs_type: "BS",
     isCredit: false,
     ignoredForCf: true,
+    isCashAccount: true, // <- 2. 追加
   },
   {
     id: "account_receivable",
@@ -137,4 +139,11 @@ export const seedAccounts: Account[] = [
     isCredit: true,
     ignoredForCf: true,
   },
+  {
+    id: "cash_change_cf",
+    AccountName: "現預金増減(CF)",
+    GlobalAccountID: null,
+    fs_type: "CF",
+    ignoredForCf: true,
+  }, // <- 3. 追加
 ];

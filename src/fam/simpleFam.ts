@@ -137,6 +137,11 @@ export class SimpleFAM {
     this.valueKeyToNodeId.clear();
     this.visiting.clear();
 
+    // ▼▼▼ ここから追加 ▼▼▼
+    // AST計算の前に、CF関連のルールを動的に生成して this.rules に注入する
+    this.generateCashFlowRules();
+    // ▲▲▲ ここまで追加 ▲▲▲
+
     console.log("\n予測計算を開始します...");
 
     const output: Record<PeriodId, Record<AccountId, number>> = {
@@ -155,11 +160,6 @@ export class SimpleFAM {
       output[nextPeriod.id][accountId] = Math.round(value);
       console.log(`    > ${accountId}@${nextPeriod.id} = ${value.toFixed(2)}`);
     }
-
-    this.generateCashFlowAccounts(nextPeriod, output);
-    this.generateBalanceChangeCashFlows(nextPeriod, output);
-    this.summarizeCashFlows(nextPeriod, output);
-    this.updateCashFromCashFlows(nextPeriod, output);
 
     console.log("予測計算を完了しました");
     return output;
@@ -376,54 +376,6 @@ export class SimpleFAM {
     return this.values.get(key) ?? 0;
   }
 
-  private generateCashFlowAccounts(
-    period: Period,
-    output: Record<PeriodId, Record<AccountId, number>>
-  ) {
-    const periodValues = output[period.id];
-    if (!periodValues) return;
-
-    for (const [accountId, rule] of Object.entries(this.rules)) {
-      if (rule.type !== "BALANCE_CHANGE") continue;
-      const balanceAccount = this.accounts.get(accountId);
-      if (!balanceAccount) continue;
-      if (balanceAccount.fs_type !== "BS") continue;
-      if (balanceAccount.ignoredForCf) continue;
-
-      const flows = rule.flowAccounts ?? [];
-      for (const flow of flows) {
-        const flowAccountId = flow.ref;
-        const flowValue = periodValues[flowAccountId];
-        if (flowValue == null) continue;
-
-        const sourceAccount = this.accounts.get(flowAccountId);
-        if (!sourceAccount) continue;
-
-        const cfAccountId = `${flowAccountId}_cf`;
-        if (!this.accounts.has(cfAccountId)) {
-          this.accounts.set(cfAccountId, {
-            id: cfAccountId,
-            AccountName: `${sourceAccount.AccountName ?? flowAccountId}（CF）`,
-            GlobalAccountID: null,
-            fs_type: "CF",
-          });
-        }
-
-        const isCredit = balanceAccount.isCredit ?? false;
-        const sign = flow.sign ?? "PLUS";
-
-        let adjusted = flowValue;
-        if (isCredit) {
-          adjusted = sign === "PLUS" ? flowValue : -flowValue;
-        } else {
-          adjusted = sign === "PLUS" ? -flowValue : flowValue;
-        }
-
-        periodValues[cfAccountId] = Math.round(adjusted);
-      }
-    }
-  }
-
   private createNextPeriod(latest: Period): Period {
     let nextYear = latest.year;
     let nextMonth = latest.month;
@@ -450,89 +402,131 @@ export class SimpleFAM {
     return createPeriod(nextYear, nextMonth, latest.periodType);
   }
 
-  private generateBalanceChangeCashFlows(
-    period: Period,
-    output: Record<PeriodId, Record<AccountId, number>>
-  ) {
-    const periodValues = output[period.id];
-    if (!periodValues) return;
+  // src/fam/simpleFam.ts (class SimpleFAM 内に追加)
 
-    const prevPeriodId = this.resolvePeriodId(period.id, { offset: -1 });
+  /**
+   * 間接法CFの計算ルールを動的に生成し、this.rules に注入する
+   * AST計算の実行前に呼び出す必要がある
+   */
+  private generateCashFlowRules() {
+    console.log("  - CF計算ルールを動的に生成中...");
 
-    for (const [accountId, account] of this.accounts.entries()) {
-      if (account.fs_type !== "BS") continue;
-      if (account.ignoredForCf) continue;
-      const rule = this.rules[accountId];
-      if (rule?.type === "BALANCE_CHANGE") continue;
+    const cfRuleItems: FormulaNode[] = [];
+    let baseProfitAccountId: AccountId | null = null;
 
-      const currentValue = periodValues[accountId] ?? 0;
-      const prevValue = this.getHistoricalValue(prevPeriodId, accountId);
-      const diff = currentValue - prevValue;
-      if (diff === 0) continue;
-
-      const cfAccountId = `${accountId}_cf`;
-      if (!this.accounts.has(cfAccountId)) {
-        this.accounts.set(cfAccountId, {
-          id: cfAccountId,
-          AccountName: `${account.AccountName ?? accountId}の増減(CF)`,
-          GlobalAccountID: null,
-          fs_type: "CF",
-        });
+    for (const account of this.accounts.values()) {
+      // 1. CF計算の起点となる利益を特定
+      if (account.isCfBaseProfit) {
+        baseProfitAccountId = account.id;
+        continue;
       }
 
-      const existing = periodValues[cfAccountId] ?? 0;
-      const isCredit = account.isCredit ?? false;
-      const adjusted = isCredit ? diff : -diff;
-      periodValues[cfAccountId] = Math.round(existing + adjusted);
-    }
-  }
+      // 3. BS科目の増減（運転資本など）をCFに反映
+      //    (isCashAccount や ignoredForCf ではないBS科目)
+      const rule = this.rules[account.id];
+      if (
+        account.fs_type === "BS" &&
+        !account.isCashAccount &&
+        !account.ignoredForCf &&
+        rule?.type !== "BALANCE_CHANGE" // BALANCE_CHANGE は 2. で処理
+      ) {
+        const cfAccountId = `${account.id}_cf_wc`;
+        // CF科目マスタになければ追加
+        if (!this.accounts.has(cfAccountId)) {
+          this.accounts.set(cfAccountId, {
+            id: cfAccountId,
+            AccountName: `${account.AccountName}増減(CF)`,
+            fs_type: "CF",
+            ignoredForCf: true,
+          });
+        }
 
-  private summarizeCashFlows(
-    period: Period,
-    output: Record<PeriodId, Record<AccountId, number>>
-  ) {
-    const periodValues = output[period.id];
-    if (!periodValues) return;
+        // 符号： 資産(isCredit: false)の増加(Diff=+)はCF減(-)
+        //       負債(isCredit: true) の増加(Diff=+)はCF増(+)
+        const sign = account.isCredit ?? false ? 1 : -1;
+        const diffExpr: FormulaNode = {
+          type: "SUB",
+          left: { type: "ACCOUNT", id: account.id },
+          right: { type: "ACCOUNT", id: account.id, period: { offset: -1 } },
+        };
 
-    let sum = 0;
-    for (const [accountId, value] of Object.entries(periodValues)) {
-      const account = this.accounts.get(accountId);
-      if (account?.fs_type === "CF" && accountId !== "cash_change_cf") {
-        sum += value ?? 0;
+        this.rules[cfAccountId] = {
+          type: "CALCULATION",
+          expression: {
+            type: "MUL",
+            left: diffExpr,
+            right: { type: "NUMBER", value: sign },
+          },
+        };
+        cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
+      }
+
+      // 2. non-cash項目 (depreciationなど) や 投資CF (capexなど) をCFに反映
+      //    (BALANCE_CHANGE の flow のうち、PL科目またはPP&E科目を調整)
+      if (rule?.type === "BALANCE_CHANGE") {
+        for (const flow of rule.flowAccounts) {
+          const flowAccount = this.accounts.get(flow.ref);
+          if (!flowAccount) continue;
+
+          // PL科目またはPP&E科目からのフローをCF調整項目とする
+          if (flowAccount.fs_type === "PL" || flowAccount.fs_type === "PP&E") {
+            // CFの起点（net_income）自体は除外
+            if (flowAccount.isCfBaseProfit) continue;
+
+            const cfAccountId = `${flow.ref}_cf_adj`;
+            if (!this.accounts.has(cfAccountId)) {
+              this.accounts.set(cfAccountId, {
+                id: cfAccountId,
+                AccountName: `${flowAccount.AccountName}調整(CF)`,
+                fs_type: "CF",
+                ignoredForCf: true,
+              });
+            }
+
+            // 符号： 資産(isCredit: false)へのPLUS(例:capex)はCF減(-)
+            //       資産(isCredit: false)へのMINUS(例:dep)はCF増(+)
+            //       負債(isCredit: true) へのPLUS(例:net_income)はCF増(+)
+            const sign = account.isCredit ?? false ? 1 : -1;
+            const flowSign = flow.sign === "PLUS" ? 1 : -1;
+            const cfSign = sign * flowSign;
+
+            this.rules[cfAccountId] = {
+              type: "CALCULATION",
+              expression: {
+                type: "MUL",
+                left: { type: "ACCOUNT", id: flow.ref },
+                right: { type: "NUMBER", value: cfSign },
+              },
+            };
+            cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
+          }
+        }
       }
     }
 
-    if (!this.accounts.has("cash_change_cf")) {
-      this.accounts.set("cash_change_cf", {
-        id: "cash_change_cf",
-        AccountName: "現預金増減",
-        GlobalAccountID: null,
-        fs_type: "CF",
-      });
+    // 4. CF集計科目 (cash_change_cf) のルールを生成
+    if (!baseProfitAccountId) {
+      throw new Error(
+        "CFの起点となる利益科目 (isCfBaseProfit: true) が見つかりません。"
+      );
     }
 
-    periodValues["cash_change_cf"] = Math.round(sum);
-  }
+    // `net_income + (cf_item1 + cf_item2 + ...)` の式を構築
+    const cfSummaryExpr = cfRuleItems.reduce<FormulaNode>(
+      (acc, item) => ({
+        type: "ADD",
+        left: acc,
+        right: item,
+      }),
+      { type: "ACCOUNT", id: baseProfitAccountId } // 起点
+    );
 
-  private updateCashFromCashFlows(
-    period: Period,
-    output: Record<PeriodId, Record<AccountId, number>>
-  ) {
-    const periodValues = output[period.id];
-    if (!periodValues) return;
-
-    const prevPeriodId = this.resolvePeriodId(period.id, { offset: -1 });
-    const previousCash = this.getHistoricalValue(prevPeriodId, "cash");
-    const cashChange = periodValues["cash_change_cf"] ?? 0;
-    const newCash = Math.round(previousCash + cashChange);
-
-    this.rules["cash"] = {
-      type: "BALANCE_CHANGE",
-      flowAccounts: [{ ref: "cash_change_cf", sign: "PLUS" }],
+    this.rules["cash_change_cf"] = {
+      type: "CALCULATION",
+      expression: cfSummaryExpr,
     };
 
-    periodValues["cash"] = newCash;
-    this.setValue(period.id, "cash", newCash);
+    console.log("  - CF計算ルール生成完了。");
   }
 
   /**
