@@ -1,10 +1,10 @@
 // src/fam/ruleHandlers.ts
 
-import { makeFF, makeTT } from "../engine/ast.ts";
+import { makeFF } from "../engine/ast.ts";
 import { NodeRegistry } from "../model/registry.ts";
 import type {
   AccountId,
-  ExpressionNode,
+  FormulaNode,
   NodeId,
   PeriodId,
   RelativePeriodReference,
@@ -23,7 +23,7 @@ export interface RuleHandlerContext {
   accountId: AccountId;
   nodeRegistry: NodeRegistry;
   buildNode: (periodId: PeriodId, accountId: AccountId) => NodeId;
-  buildExpression: (expr: ExpressionNode) => NodeId;
+  buildFormula: (formula: FormulaNode) => NodeId;
   resolvePeriodId: (reference?: RelativePeriodReference) => PeriodId;
 }
 
@@ -70,6 +70,7 @@ type BalanceChangeRuleHandler = RuleHandlerFunction<BalanceChangeRule>;
 
 /**
  * INPUTルールのハンドラー
+ * パターン: 終端ノード作成（定数値）
  * 固定値を設定します
  */
 export const handleInput: InputRuleHandler = (rule, context) => {
@@ -85,15 +86,17 @@ export const handleInput: InputRuleHandler = (rule, context) => {
 
 /**
  * CALCULATIONルールのハンドラー
+ * パターン: 式構築（定義済み式の委譲）
  * 計算式を評価します
  */
 export const handleCalculation: CalculationRuleHandler = (rule, context) => {
-  const { buildExpression } = context;
-  return buildExpression(rule.expression);
+  const { buildFormula } = context;
+  return buildFormula(rule.expression);
 };
 
 /**
  * FIXED_VALUEルールのハンドラー
+ * パターン: 科目参照（buildNode）
  * 前期の値をそのまま使用します
  */
 export const handleFixedValue: FixedValueRuleHandler = (_rule, context) => {
@@ -106,61 +109,59 @@ export const handleFixedValue: FixedValueRuleHandler = (_rule, context) => {
 
 /**
  * REFERENCEルールのハンドラー
+ * パターン: 科目参照（buildNode）
  * 他の科目を参照します
  */
 export const handleReference: ReferenceRuleHandler = (rule, context) => {
-  const { buildExpression } = context;
-  return buildExpression({
-    type: "ACCOUNT",
-    id: rule.ref,
-  });
+  const { periodId, buildNode } = context;
+  return buildNode(periodId, rule.ref);
 };
 
 /**
  * PROPORTIONATEルールのハンドラー
+ * パターン: 式構築（複雑な式の構築）
  * ドライバー科目の変化率に応じて比例計算します
+ * 計算式: 前期値 × (ドライバー当期値 / ドライバー前期値)
  */
 export const handleProportionate: ProportionateRuleHandler = (
-  // type rule = { type: "PROPORTIONATE"; ref: AccountId }
   rule,
   context
 ) => {
-  const { accountId, periodId, nodeRegistry, buildNode, resolvePeriodId } =
-    context;
-  // "revenue"など
+  const { accountId, buildFormula } = context;
   const driverAccount = rule.ref;
-  const prevPeriodId = resolvePeriodId({
-    offset: -1,
+
+  // 前期値 × (ドライバー当期値 / ドライバー前期値)
+  return buildFormula({
+    type: "MUL",
+    left: {
+      type: "ACCOUNT",
+      id: accountId,
+      period: { offset: -1 },
+    },
+    right: {
+      type: "DIV",
+      left: {
+        type: "ACCOUNT",
+        id: driverAccount,
+      },
+      right: {
+        type: "ACCOUNT",
+        id: driverAccount,
+        period: { offset: -1 },
+      },
+    },
   });
-
-  const driverCurrent = buildNode(periodId, driverAccount);
-  const driverPrev = buildNode(prevPeriodId, driverAccount);
-  const basePrev = buildNode(prevPeriodId, accountId);
-
-  const ratioNode = makeTT(
-    nodeRegistry,
-    driverCurrent,
-    driverPrev,
-    "DIV",
-    `${driverAccount}@${periodId}/prev`
-  );
-
-  return makeTT(
-    nodeRegistry,
-    basePrev,
-    ratioNode,
-    "MUL",
-    `${accountId}@${periodId}:proportionate`
-  );
 };
 
 /**
  * GROWTH_RATEルールのハンドラー
+ * パターン: 式構築（単一演算）
  * 前期値に成長率を掛けます
+ * 計算式: 前期値 × (1 + 成長率)
  */
 export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
-  const { accountId, buildExpression } = context;
-  return buildExpression({
+  const { accountId, buildFormula } = context;
+  return buildFormula({
     type: "MUL",
     left: { type: "ACCOUNT", id: accountId, period: { offset: -1 } },
     right: { type: "NUMBER", value: 1 + rule.rate },
@@ -169,11 +170,13 @@ export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
 
 /**
  * PERCENTAGEルールのハンドラー
+ * パターン: 式構築（単一演算）
  * 参照科目に割合を掛けます
+ * 計算式: 参照科目 × 割合
  */
 export const handlePercentage: PercentageRuleHandler = (rule, context) => {
-  const { buildExpression } = context;
-  return buildExpression({
+  const { buildFormula } = context;
+  return buildFormula({
     type: "MUL",
     left: { type: "ACCOUNT", id: rule.ref },
     right: { type: "NUMBER", value: rule.percentage },
@@ -182,43 +185,30 @@ export const handlePercentage: PercentageRuleHandler = (rule, context) => {
 
 /**
  * BALANCE_CHANGEルールのハンドラー
+ * パターン: 式構築（複雑な式の構築）
  * 前期末残高にフロー（増減）を加算します
+ * 計算式: 前期末残高 + (フロー1 + フロー2 + ...)
  */
 export const handleBalanceChange: BalanceChangeRuleHandler = (
   rule,
   context
 ) => {
-  const {
-    accountId,
-    periodId,
-    nodeRegistry,
-    buildNode,
-    buildExpression,
-    resolvePeriodId,
-  } = context;
+  const { accountId, buildFormula } = context;
 
-  // 1. 前期のPeriodIDを取得
-  const prevPeriodId = resolvePeriodId({
-    offset: -1,
-  });
-
-  // 2. この勘定(accountId)の前期末残高のノードを構築
-  const prevBalanceNodeId = buildNode(prevPeriodId, accountId);
-
-  // 3. フロー（当期増減）の合計式を構築
-  const flowsExpr = rule.flows.reduce<ExpressionNode | null>((acc, flow) => {
-    const baseNode: ExpressionNode = {
+  // フロー（当期増減）の合計式を構築
+  const flowsExpr = rule.flows.reduce<FormulaNode | null>((acc, flow) => {
+    const baseNode: FormulaNode = {
       type: "ACCOUNT",
       id: flow.ref,
     };
-    const signedNode =
+    const signedNode: FormulaNode =
       flow.sign === "PLUS"
         ? baseNode
-        : ({
+        : {
             type: "MUL",
             left: baseNode,
             right: { type: "NUMBER", value: -1 },
-          } as ExpressionNode);
+          };
     if (!acc) return signedNode;
     return {
       type: "ADD",
@@ -227,19 +217,16 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
     };
   }, null);
 
-  // 4. フロー合計のノードを構築
-  const flowsNodeId = buildExpression(
-    flowsExpr ?? { type: "NUMBER", value: 0 }
-  );
-
-  // 5. 最終的なノードID = 前期末残高ノード + フロー合計ノード
-  return makeTT(
-    nodeRegistry,
-    prevBalanceNodeId, // 前期末残高
-    flowsNodeId, // 当期増減
-    "ADD", // 加算
-    `${accountId}@${periodId}:balance_change`
-  );
+  // 前期末残高 + フロー合計の式を構築
+  return buildFormula({
+    type: "ADD",
+    left: {
+      type: "ACCOUNT",
+      id: accountId,
+      period: { offset: -1 },
+    },
+    right: flowsExpr ?? { type: "NUMBER", value: 0 },
+  });
 };
 
 /**

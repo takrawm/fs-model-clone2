@@ -5,7 +5,7 @@ import { NodeRegistry } from "../model/registry.ts";
 import type {
   Account,
   AccountId,
-  ExpressionNode,
+  FormulaNode,
   NodeId,
   Op,
   Period,
@@ -218,30 +218,23 @@ export class SimpleFAM {
       // アロー関数はこのthisをキャプチャして保持します。
       nodeRegistry: this.nodeRegistry,
       buildNode: (pId, aId) => this.buildNode(pId, aId),
-      buildExpression: (expr) =>
-        this.buildExpression(expr, {
+      buildFormula: (formula) =>
+        this.buildFormula(formula, {
           periodId,
           accountId,
         }),
       resolvePeriodId: (ref) => this.resolvePeriodId(periodId, ref),
     };
 
-    //
-    const ruleHandler = ruleHandlers[rule.type];
-    if (!ruleHandler) {
+    //ruleHandlerFnはruleHandlers[rule.type]から取得したハンドラー関数
+    const ruleHandlerFn = ruleHandlers[rule.type];
+    if (!ruleHandlerFn) {
       this.visiting.delete(valueKey);
       throw new Error(`未対応のルールタイプ: ${(rule as any).type}`);
     }
-
-    // ruleHandlerはruleHandlers[rule.type]から取得したハンドラー関数
-    //
-    const nodeId = // rule.type === "PROPORTIONATE"のとき
-      // {type: "PROPORTIONATE",ref: "revenue"  // ドライバー科目のID}
-
-      (ruleHandler as (rule: Rule, context: RuleHandlerContext) => NodeId)(
-        rule,
-        handlerContext
-      );
+    const nodeId = (
+      ruleHandlerFn as (rule: Rule, context: RuleHandlerContext) => NodeId
+    )(rule, handlerContext);
 
     this.valueKeyToNodeId.set(valueKey, nodeId);
     this.visiting.delete(valueKey);
@@ -251,7 +244,7 @@ export class SimpleFAM {
   /**
    * 計算式のノードツリーを構築します
    *
-   * ExpressionNodeは再帰的な構造を持っています。この構造をたどりながら、
+   * FormulaNodeは再帰的な構造を持っています。この構造をたどりながら、
    * 対応するASTノードを構築していきます。
    *
    * 例えば「単価 × 数量 + 手数料」という式の場合：
@@ -275,38 +268,44 @@ export class SimpleFAM {
    * price  qty
    *
    * @param contextId - 現在構築中の科目のID（エラーメッセージ用）
-   * @param expr - 計算式のノード
+   * @param formula - 計算式のノード
    * @returns 構築されたASTノードのID
    */
-  private buildExpression(
-    expr: ExpressionNode,
+  private buildFormula(
+    formula: FormulaNode,
     ctx: {
       periodId: PeriodId;
       accountId: AccountId;
     }
   ): NodeId {
     const labelPrefix = `${ctx.accountId}@${ctx.periodId}`;
-    switch (expr.type) {
+    switch (formula.type) {
       case "NUMBER": {
+        // makeFF()もNodeIdを返す
         return makeFF(
           this.nodeRegistry,
-          expr.value,
-          `${labelPrefix}:const(${expr.value})`
+          formula.value,
+          `${labelPrefix}:const(${formula.value})`
         );
       }
 
       case "ACCOUNT": {
-        const targetPeriodId = this.resolvePeriodId(ctx.periodId, expr.period);
-        return this.buildNode(targetPeriodId, expr.id);
+        const targetPeriodId = this.resolvePeriodId(
+          ctx.periodId,
+          formula.period
+        );
+        // this.buildNode(targetPeriodId, formula.id)もNodeIdを返す
+        return this.buildNode(targetPeriodId, formula.id);
       }
 
       case "ADD":
       case "SUB":
       case "MUL":
       case "DIV": {
-        const leftNode = this.buildExpression(expr.left, ctx);
-        const rightNode = this.buildExpression(expr.right, ctx);
-        const operator = expr.type as Op;
+        const leftNode = this.buildFormula(formula.left, ctx);
+        const rightNode = this.buildFormula(formula.right, ctx);
+        const operator = formula.type as Op;
+        // makeTT()もNodeIdを返す
         return makeTT(
           this.nodeRegistry,
           leftNode,
@@ -318,8 +317,8 @@ export class SimpleFAM {
 
       default: {
         return assertNever(
-          expr as never,
-          `未対応の式タイプ: ${(expr as any).type} (context: ${labelPrefix})`
+          formula as never,
+          `未対応の式タイプ: ${(formula as any).type} (context: ${labelPrefix})`
         );
       }
     }

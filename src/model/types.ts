@@ -7,7 +7,7 @@
  * TypeScriptの型システムを活用することで、コンパイル時に多くのエラーを検出でき、
  * 実行時の予期しない動作を防ぐことができます。
  *
- * 特に重要なのは、ExpressionNode型です。これは計算式を構造化して表現するための
+ * 特に重要なのは、FormulaNode型です。これは計算式を構造化して表現するための
  * 型で、再帰的な構造を持っています。この型により、任意の複雑さの数式を
  * 型安全に扱うことができます。
  */
@@ -95,7 +95,7 @@ export interface TTNode {
  * これは、財務計算の核心となる型定義です。計算式をツリー構造として表現することで、
  * 演算の優先順位を明確にし、複雑な計算を正確に実行できます。
  *
- * ExpressionNodeは3つの基本的な要素から構成されます。
+ * FormulaNodeは3つの基本的な要素から構成されます。
  *
  * 1. NUMBER: 定数値
  *    税率、回転日数、成長率など、計算式の中で使用される固定の数値です。
@@ -109,7 +109,7 @@ export interface TTNode {
  *    例: { type: 'ACCOUNT', id: 'revenue', period: { offset: -1 } }
  *
  * 3. 二項演算: 2つの式を演算子で結合
- *    左右の部分式（これも ExpressionNode）を演算で結合します。
+ *    左右の部分式（これも FormulaNode）を演算で結合します。
  *    部分式自体がさらに複雑な構造を持つことができるため、
  *    任意の深さのツリーを構築できます。
  *    例: { type: 'ADD', left: {...}, right: {...} }
@@ -133,7 +133,7 @@ export interface TTNode {
  *
  * このように表現されます。
  */
-export type ExpressionNode = NumberNode | AccountNode | BinaryOpNode;
+export type FormulaNode = NumberNode | AccountNode | BinaryOpNode;
 
 /**
  * 定数値ノード
@@ -181,18 +181,6 @@ export interface NumberNode {
  *   right: { type: 'NUMBER', value: 1.1 }
  * }
  */
-
-/**
- * 相対参照（現在使用中）
- * 現在の期間からのオフセットで期間を指定
- */
-export type RelativePeriodReference = { offset: number };
-
-/**
- * 絶対参照（将来用）
- * 特定期間IDを直接指定
- */
-export type AbsolutePeriodReference = PeriodId;
 
 export interface AccountNode {
   type: "ACCOUNT";
@@ -245,8 +233,8 @@ export interface AccountNode {
  */
 export interface BinaryOpNode {
   type: "ADD" | "SUB" | "MUL" | "DIV";
-  left: ExpressionNode;
-  right: ExpressionNode;
+  left: FormulaNode;
+  right: FormulaNode;
 }
 
 /**
@@ -285,9 +273,17 @@ export interface Period {
   periodType: PeriodType;
 }
 
-export interface ComputeOptions {
-  periodsToGenerate?: number;
-}
+/**
+ * 相対参照（現在使用中）
+ * 現在の期間からのオフセットで期間を指定
+ */
+export type RelativePeriodReference = { offset: number };
+
+/**
+ * 絶対参照（将来用）
+ * 特定期間IDを直接指定
+ */
+export type AbsolutePeriodReference = PeriodId;
 
 /**
  * 値のキー文字列
@@ -326,7 +322,7 @@ export interface Value {
  */
 export type Rule =
   | { type: "INPUT"; value: number }
-  | { type: "CALCULATION"; expression: ExpressionNode }
+  | { type: "CALCULATION"; expression: FormulaNode }
   | { type: "GROWTH_RATE"; rate: number }
   | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
   | { type: "REFERENCE"; ref: AccountId }
