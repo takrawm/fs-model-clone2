@@ -256,7 +256,7 @@ export interface Account {
   fs_type?: FsType | null;
   parent_id?: AccountId | null;
   isCredit?: boolean | null;
-  ignoredForCf?: boolean | null;
+  ignoredForCf?: boolean | null; // CF計算のときに除外する項目（現預金、「流動資産合計」などの合計科目）
   isCfBaseProfit?: boolean | null; // 1. CF計算の起点となる利益（例: net_income）
   isCashAccount?: boolean | null; // 3. 現預金科目（例: cash）
 }

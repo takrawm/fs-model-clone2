@@ -121,4 +121,10 @@ export const seedActualValues: Value[] = [
     value: 100000,
     isInput: true,
   },
+  {
+    accountId: "equity_and_liabilities_total",
+    periodId: "2025-3-ANNUAL",
+    value: 150000,
+    isInput: true,
+  },
 ];

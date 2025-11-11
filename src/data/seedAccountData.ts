@@ -140,6 +140,14 @@ export const seedAccounts: Account[] = [
     ignoredForCf: true,
   },
   {
+    id: "equity_and_liabilities_total",
+    AccountName: "負債・純資産合計",
+    GlobalAccountID: null,
+    fs_type: "BS",
+    isCredit: true,
+    ignoredForCf: true,
+  },
+  {
     id: "cash_change_cf",
     AccountName: "現預金増減(CF)",
     GlobalAccountID: null,

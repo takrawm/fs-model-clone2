@@ -161,6 +161,7 @@ export class SimpleFAM {
     for (const accountId of Object.keys(this.rules) as AccountId[]) {
       const nodeId = this.buildNode(nextPeriod.id, accountId);
       const result = evalTopo(this.nodeRegistry, [nodeId]);
+      // Mapオブジェクトのgetメソッド
       const value = result.get(nodeId) ?? 0;
       this.setValue(nextPeriod.id, accountId, value);
       output[nextPeriod.id][accountId] = Math.round(value);
@@ -248,31 +249,6 @@ export class SimpleFAM {
   }
 
   /**
-   * 計算式のノードツリーを構築します
-   *
-   * FormulaNodeは再帰的な構造を持っています。この構造をたどりながら、
-   * 対応するASTノードを構築していきます。
-   *
-   * 例えば「単価 × 数量 + 手数料」という式の場合：
-   *
-   * {
-   *   type: 'ADD',
-   *   left: {
-   *     type: 'MUL',
-   *     left: { type: 'ACCOUNT', id: 'unit_price' },
-   *     right: { type: 'ACCOUNT', id: 'quantity' }
-   *   },
-   *   right: { type: 'ACCOUNT', id: 'commission' }
-   * }
-   *
-   * この構造から、以下のASTノードツリーが構築されます：
-   *
-   *        ADD
-   *       /   \
-   *     MUL   commission
-   *    /   \
-   * price  qty
-   *
    * @param contextId - 現在構築中の科目のID（エラーメッセージ用）
    * @param formula - 計算式のノード
    * @returns 構築されたASTノードのID

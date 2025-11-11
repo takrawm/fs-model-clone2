@@ -49,19 +49,19 @@ if (actualPrevious) {
     printKPI(account.AccountName, actualPrevious[account.id], unit);
   }
   for (const account of monetaryPlAccounts) {
-    printMoney(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.AccountName, actualPrevious[account.id]);
   }
 
   // BS（貸借対照表）
   console.log("\n【貸借対照表】");
   for (const account of bsAccounts) {
-    printMoney(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.AccountName, actualPrevious[account.id]);
   }
 
   // CF（キャッシュフロー計算書）
   console.log("\n【キャッシュフロー計算書】");
   for (const account of cfAccounts) {
-    printMoney(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.AccountName, actualPrevious[account.id]);
   }
 } else {
   console.log(`\n=== ${previousPeriodId} 実績 ===`);
@@ -78,64 +78,52 @@ for (const account of kpiAccounts) {
   printKPI(account.AccountName, forecastValues[account.id], unit);
 }
 for (const account of monetaryPlAccounts) {
-  printMoney(account.AccountName, forecastValues[account.id]);
+  printAccount(
+    account.AccountName,
+    forecastValues[account.id],
+    actualPrevious?.[account.id]
+  );
 }
 
 // BS（貸借対照表）
 console.log("\n【貸借対照表】");
 for (const account of bsAccounts) {
-  printMoney(account.AccountName, forecastValues[account.id]);
+  printAccount(
+    account.AccountName,
+    forecastValues[account.id],
+    actualPrevious?.[account.id]
+  );
 }
 
 // CF（キャッシュフロー計算書）
 console.log("\n【キャッシュフロー計算書】");
 for (const account of cfAccounts) {
-  printMoney(account.AccountName, forecastValues[account.id]);
+  printAccount(
+    account.AccountName,
+    forecastValues[account.id],
+    actualPrevious?.[account.id]
+  );
 }
 
 // PP&E（設備関連）
 if (ppeAccounts.length > 0) {
   console.log("\n【設備関連】");
   for (const account of ppeAccounts) {
-    printMoney(account.AccountName, forecastValues[account.id]);
+    printAccount(
+      account.AccountName,
+      forecastValues[account.id],
+      actualPrevious?.[account.id]
+    );
   }
 }
 
-// 実績 vs 予測の比較
-console.log(`\n=== ${previousPeriodId} 実績 vs ${forecastPeriodId} 予測 ===`);
-if (actualPrevious) {
-  // PL科目の比較
-  console.log("\n【損益計算書】");
-  for (const account of monetaryPlAccounts) {
-    const actual = actualPrevious[account.id];
-    const forecast = forecastValues[account.id];
-    if (actual != null && forecast != null) {
-      printComparison(account.AccountName, actual, forecast);
-    }
-  }
-
-  // BS科目の比較
-  console.log("\n【貸借対照表】");
-  for (const account of bsAccounts) {
-    const actual = actualPrevious[account.id];
-    const forecast = forecastValues[account.id];
-    if (actual != null && forecast != null) {
-      printComparison(account.AccountName, actual, forecast);
-    }
-  }
-
-  // CF科目の比較
-  console.log("\n【キャッシュフロー計算書】");
-  for (const account of cfAccounts) {
-    const actual = actualPrevious[account.id];
-    const forecast = forecastValues[account.id];
-    if (actual != null && forecast != null) {
-      printComparison(account.AccountName, actual, forecast);
-    }
-  }
-} else {
-  console.log("比較可能な実績データが見つかりません。");
-}
+// 貸借一致チェック
+printBalanceCheck(
+  forecastPeriodId,
+  previousPeriodId,
+  forecastValues,
+  actualPrevious
+);
 
 // デバッグ用：AST構造を表示（コメント解除で確認可能）
 // fam.printAST();
@@ -159,25 +147,63 @@ function printKPI(
   console.log(`  ${label ?? "不明"}: ${value.toLocaleString()}${unit}`);
 }
 
-function printMoney(label: string | undefined, value: number | undefined) {
-  if (value == null) return;
-  console.log(`  ${label ?? "不明"}: ${value.toLocaleString()} 円`);
+function printAccount(
+  label: string | undefined,
+  forecastValue: number | undefined,
+  actualValue?: number | undefined
+) {
+  if (forecastValue == null) return;
+
+  // 実績値がある場合は比較表示、ない場合は単純表示
+  if (actualValue != null) {
+    const diff = forecastValue - actualValue;
+    const diffRate = ((forecastValue / actualValue - 1) * 100).toFixed(1);
+    const diffSign = diff >= 0 ? "+" : "";
+    console.log(
+      `  ${
+        label ?? "不明"
+      }: ${actualValue.toLocaleString()}円 → ${forecastValue.toLocaleString()}円 (${diffSign}${diff.toLocaleString()}円, ${diffSign}${diffRate}%)`
+    );
+  } else {
+    console.log(`  ${label ?? "不明"}: ${forecastValue.toLocaleString()} 円`);
+  }
 }
 
-function printComparison(
-  label: string | undefined,
-  actual: number | undefined,
-  forecastValue: number | undefined
+function printBalanceCheck(
+  forecastPeriodId: string,
+  previousPeriodId: string,
+  forecastValues: Record<string, number>,
+  actualValues?: Record<string, number> | null
 ) {
-  if (actual == null || forecastValue == null) return;
-  const diff = forecastValue - actual;
-  const diffRate = ((forecastValue / actual - 1) * 100).toFixed(1);
-  const diffSign = diff >= 0 ? "+" : "";
+  console.log("\n=== 貸借一致チェック ===");
+
+  const forecastAssets = forecastValues["assets_total"] ?? 0;
+  const forecastEquityAndLiabilities =
+    forecastValues["equity_and_liabilities_total"] ?? 0;
+  const forecastDiff = forecastAssets - forecastEquityAndLiabilities;
+
   console.log(
-    `  ${
-      label ?? "不明"
-    }: ${actual.toLocaleString()}円 → ${forecastValue.toLocaleString()}円 (${diffSign}${diff.toLocaleString()}円, ${diffSign}${diffRate}%)`
+    `\n【${forecastPeriodId} 予測】\n  資産合計: ${forecastAssets.toLocaleString()} 円\n  負債・純資産合計: ${forecastEquityAndLiabilities.toLocaleString()} 円\n  差額: ${forecastDiff.toLocaleString()} 円`
   );
+
+  if (actualValues) {
+    const actualAssets = actualValues["assets_total"] ?? 0;
+    const actualEquityAndLiabilities =
+      actualValues["equity_and_liabilities_total"] ?? 0;
+    const actualDiff = actualAssets - actualEquityAndLiabilities;
+
+    console.log(
+      `\n【${previousPeriodId} 実績】\n  資産合計: ${actualAssets.toLocaleString()} 円\n  負債・純資産合計: ${actualEquityAndLiabilities.toLocaleString()} 円\n  差額: ${actualDiff.toLocaleString()} 円`
+    );
+  }
+
+  if (forecastDiff === 0) {
+    console.log("\n✓ 貸借が一致しています。");
+  } else {
+    console.log(
+      `\n⚠ 貸借が一致していません。差額: ${forecastDiff.toLocaleString()} 円`
+    );
+  }
 }
 
 function decrementFiscalYear(periodId: string): string {
@@ -186,14 +212,6 @@ function decrementFiscalYear(periodId: string): string {
   if (match) {
     const year = parseInt(match[1], 10);
     return `${year - 1}-${match[2]}-ANNUAL`;
-  }
-
-  // フォールバック: 従来の形式（"FY2026"など）
-  const fallbackMatch = periodId.match(/^(.*?)(\d+)$/);
-  if (fallbackMatch) {
-    const [, prefix, numberPart] = fallbackMatch;
-    const nextNumber = Math.max(Number(numberPart) - 1, 0);
-    return `${prefix}${nextNumber}`;
   }
 
   return periodId;
