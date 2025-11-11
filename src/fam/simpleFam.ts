@@ -73,7 +73,13 @@ export class SimpleFAM {
     for (const account of accounts) {
       this.accounts.set(account.id, account);
     }
-    console.log("アカウントを設定しました:", this.accounts);
+  }
+
+  /**
+   * 全てのアカウント（動的に追加されたものも含む）を取得します
+   */
+  getAllAccounts(): Account[] {
+    return Array.from(this.accounts.values());
   }
 
   /**
