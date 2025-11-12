@@ -4,27 +4,6 @@ import { NodeRegistry } from "../model/registry.ts";
 import type { NodeId, Op } from "../model/types.ts";
 
 /**
- * ASTエンジン
- *
- * このファイルは、抽象構文木（Abstract Syntax Tree）の構築と評価を担当します。
- * ASTは、計算式をツリー構造で表現したもので、以下の処理を行います。
- *
- * 1. ノードの作成: FFノード（値）とTTノード（演算）を作成
- * 2. 依存関係の解決: トポロジカルソートで評価順序を決定
- * 3. 式の評価: 正しい順序でノードを計算
- *
- * なぜASTを使うのでしょうか。財務モデルでは、多くの科目が相互に依存しています。
- * 例えば、営業利益は売上総利益に依存し、売上総利益は売上高と原価に依存します。
- * この依存関係の連鎖を正しく解決するには、グラフ理論のアルゴリズムが必要です。
- *
- * ASTを使うことで、以下の問題を自動的に解決できます。
- *
- * - 計算の順序: どの科目から先に計算すべきか
- * - 循環参照の検出: A→B→C→A のような無限ループを防ぐ
- * - 効率的な評価: 同じ科目を何度も計算しない
- */
-
-/**
  * FFノード（終端ノード）を作成します
  *
  * FFは「Fixed/Final」の略で、値を直接持つノードを意味します。
@@ -173,11 +152,11 @@ export function makeTT(
  * 揃っていることが保証されます。
  *
  * @param reg - ノードレジストリ
- * @param roots - 評価したいルートノードのIDリスト
+ * @param rootNodeIds - 評価したいルートノードのIDリスト
  * @returns 評価すべき順序でソートされたノードIDの配列
  * @throws 循環参照が検出された場合
  */
-function topoSort(reg: NodeRegistry, roots: NodeId[]): NodeId[] {
+function topoSort(reg: NodeRegistry, rootNodeIds: NodeId[]): NodeId[] {
   // ステップ1: ルートノードから到達可能なすべてのノードを収集
   // これにより、不要なノード（使用されていないノード）を除外できます
   const reachable = new Set<NodeId>();
@@ -191,8 +170,8 @@ function topoSort(reg: NodeRegistry, roots: NodeId[]): NodeId[] {
       visit(node.ref2);
     }
   };
-  for (const root of roots) {
-    visit(root);
+  for (const rootNodeId of rootNodeIds) {
+    visit(rootNodeId);
   }
 
   const nodes = Array.from(reachable);
@@ -301,15 +280,15 @@ function topoSort(reg: NodeRegistry, roots: NodeId[]): NodeId[] {
  * 6. ノード6を評価 → 577500 - 346500 = 231000
  *
  * @param reg - ノードレジストリ
- * @param roots - 評価したいルートノードのIDリスト
+ * @param rootNodeIds - 評価したいルートノードのIDリスト
  * @returns 各ノードの評価結果を格納した Map
  */
 export function evalTopo(
   reg: NodeRegistry,
-  roots: NodeId[]
+  rootNodeIds: NodeId[]
 ): Map<NodeId, number> {
   // トポロジカルソートで評価順序を決定
-  const order = topoSort(reg, roots);
+  const order = topoSort(reg, rootNodeIds);
 
   // 各ノードの評価結果を格納する Map
   const values = new Map<NodeId, number>();
