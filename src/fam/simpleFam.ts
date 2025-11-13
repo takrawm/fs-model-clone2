@@ -19,26 +19,6 @@ import { createPeriod } from "../utils/periodUtils.ts";
 import { ruleHandlers } from "./ruleHandlers.ts";
 import type { RuleHandlerContext } from "./ruleHandlers.ts";
 
-/**
- * 簡素版FAM（Financial Analysis Model）
- *
- * このクラスは、財務モデリングの核心である「依存関係を持つ計算式の評価」に
- * 焦点を絞った学習用の実装です。複雑な機能を削ぎ落とし、ASTエンジンの
- * 動作原理を明確に理解できるように設計されています。
- *
- * 主な機能：
- * 1. 実績データの読み込み
- * 2. 計算ルールに基づくASTの構築
- * 3. トポロジカルソートによる依存関係の解決
- * 4. 予測値の計算と取得
- *
- * 削除された機能：
- * - 貸借対照表やキャッシュフロー計算書の処理
- * - 複数年度の予測
- * - 親子関係の自動再計算
- * - GAIDマッピング
- * - Balance & Change処理
- */
 export class SimpleFAM {
   // ASTノードを管理するレジストリ
   private nodeRegistry: NodeRegistry = new NodeRegistry();
@@ -138,7 +118,7 @@ export class SimpleFAM {
     const nextPeriod = this.createNextPeriod(latestPeriod);
     this.periods.push(nextPeriod);
     this.periodIndexById.set(nextPeriod.id, this.periods.length - 1);
-
+    // NodeRegistryのインスタンス化
     this.nodeRegistry = new NodeRegistry();
     this.valueKeyToNodeId.clear();
     this.visiting.clear();
@@ -159,7 +139,7 @@ export class SimpleFAM {
     );
 
     for (const accountId of Object.keys(this.rules) as AccountId[]) {
-      const nodeId = this.buildNode(nextPeriod.id, accountId);
+      const nodeId = this.buildNodeForAccount(nextPeriod.id, accountId);
       const result = evalTopo(this.nodeRegistry, [nodeId]);
       // Mapオブジェクトのgetメソッド
       const value = result.get(nodeId) ?? 0;
@@ -173,9 +153,10 @@ export class SimpleFAM {
   }
 
   /**
-   * 指定された科目のASTノードを構築します
+   * 指定された科目のASTノードを構築します（内部実装）
    *
-   * このメソッドは再帰的に動作します。ある科目が他の科目に依存している場合、
+   * このメソッドは、RuleHandlerContextのbuildNodeから呼び出されます。
+   * 再帰的に動作し、ある科目が他の科目に依存している場合、
    * まず依存先のノードを構築してから、自身のノードを構築します。
    *
    * 例えば、売上総利益が売上高と原価に依存している場合：
@@ -185,10 +166,14 @@ export class SimpleFAM {
    *
    * 循環参照が検出された場合はエラーを投げます。
    *
+   * @param periodId - 期間ID
    * @param accountId - 構築する科目のID
    * @returns 構築されたASTノードのID
    */
-  private buildNode(periodId: PeriodId, accountId: AccountId): NodeId {
+  private buildNodeForAccount(
+    periodId: PeriodId,
+    accountId: AccountId
+  ): NodeId {
     const valueKey = this.createValueKeyString(periodId, accountId);
     if (this.valueKeyToNodeId.has(valueKey))
       return this.valueKeyToNodeId.get(valueKey)!;
@@ -220,17 +205,17 @@ export class SimpleFAM {
     const handlerContext: RuleHandlerContext = {
       periodId,
       accountId,
-      // このbuildNodeメソッドはインスタンスメソッドなので、
+      // buildNodeForAccountメソッドはインスタンスメソッドなので、
       // このメソッドが実行されている間、thisはSimpleFAMのインスタンスを指しています。
       // アロー関数はこのthisをキャプチャして保持します。
       nodeRegistry: this.nodeRegistry,
-      buildNode: (pId, aId) => this.buildNode(pId, aId),
-      buildFormula: (formula) =>
-        this.buildFormula(formula, {
+      buildNode: (pId, aId) => this.buildNodeForAccount(pId, aId),
+      buildFormula: (formulaNode) =>
+        this.buildFormulaNode(formulaNode, {
           periodId,
           accountId,
         }),
-      resolvePeriodId: (ref) => this.resolvePeriodId(periodId, ref),
+      resolvePeriodId: (ref) => this.resolvePeriodIdWithBase(periodId, ref),
     };
 
     //ruleHandlerFnはruleHandlers[rule.type]から取得したハンドラー関数
@@ -249,11 +234,16 @@ export class SimpleFAM {
   }
 
   /**
-   * @param contextId - 現在構築中の科目のID（エラーメッセージ用）
+   * FormulaNodeをASTノードに変換します（内部実装）
+   *
+   * このメソッドは、RuleHandlerContextのbuildFormulaから呼び出されます。
+   * ctxパラメータが必要なため、内部実装メソッドとして分離しています。
+   *
    * @param formula - 計算式のノード
+   * @param ctx - 期間と科目のコンテキスト情報
    * @returns 構築されたASTノードのID
    */
-  private buildFormula(
+  private buildFormulaNode(
     formula: FormulaNode,
     ctx: {
       periodId: PeriodId;
@@ -272,21 +262,18 @@ export class SimpleFAM {
       }
 
       case "ACCOUNT": {
-        const targetPeriodId = this.resolvePeriodId(
+        const targetPeriodId = this.resolvePeriodIdWithBase(
           ctx.periodId,
           formula.period
         );
-        // this.buildNode(targetPeriodId, formula.id)もNodeIdを返す
-        return this.buildNode(targetPeriodId, formula.id);
+        // this.buildNodeForAccount(targetPeriodId, formula.id)もNodeIdを返す
+        return this.buildNodeForAccount(targetPeriodId, formula.id);
       }
 
-      case "ADD":
-      case "SUB":
-      case "MUL":
-      case "DIV": {
-        const leftNode = this.buildFormula(formula.left, ctx);
-        const rightNode = this.buildFormula(formula.right, ctx);
-        const operator = formula.type as Op;
+      case "BINARY_OP": {
+        const leftNode = this.buildFormulaNode(formula.left, ctx);
+        const rightNode = this.buildFormulaNode(formula.right, ctx);
+        const operator = formula.op;
         // makeTT()もNodeIdを返す
         return makeTT(
           this.nodeRegistry,
@@ -306,7 +293,17 @@ export class SimpleFAM {
     }
   }
 
-  private resolvePeriodId(
+  /**
+   * 基準期間と相対参照から期間IDを解決します（内部実装）
+   *
+   * このメソッドは、RuleHandlerContextのresolvePeriodIdから呼び出されます。
+   * basePeriodIdパラメータが必要なため、内部実装メソッドとして分離しています。
+   *
+   * @param basePeriodId - 基準となる期間ID
+   * @param reference - 相対期間参照（オフセット）
+   * @returns 解決された期間ID
+   */
+  private resolvePeriodIdWithBase(
     basePeriodId: PeriodId,
     reference?: RelativePeriodReference
   ): PeriodId {
@@ -427,7 +424,8 @@ export class SimpleFAM {
         //       負債(isCredit: true) の増加(Diff=+)はCF増(+)
         const sign = account.isCredit ?? false ? 1 : -1;
         const diffExpr: FormulaNode = {
-          type: "SUB",
+          type: "BINARY_OP",
+          op: "SUB",
           left: { type: "ACCOUNT", id: account.id },
           right: { type: "ACCOUNT", id: account.id, period: { offset: -1 } },
         };
@@ -435,7 +433,8 @@ export class SimpleFAM {
         this.rules[cfAccountId] = {
           type: "CALCULATION",
           expression: {
-            type: "MUL",
+            type: "BINARY_OP",
+            op: "MUL",
             left: diffExpr,
             right: { type: "NUMBER", value: sign },
           },
@@ -475,7 +474,8 @@ export class SimpleFAM {
             this.rules[cfAccountId] = {
               type: "CALCULATION",
               expression: {
-                type: "MUL",
+                type: "BINARY_OP",
+                op: "MUL",
                 left: { type: "ACCOUNT", id: flow.ref },
                 right: { type: "NUMBER", value: cfSign },
               },
@@ -496,7 +496,8 @@ export class SimpleFAM {
     // `net_income + (cf_item1 + cf_item2 + ...)` の式を構築
     const cfSummaryExpr = cfRuleItems.reduce<FormulaNode>(
       (acc, item) => ({
-        type: "ADD",
+        type: "BINARY_OP",
+        op: "ADD",
         left: acc,
         right: item,
       }),

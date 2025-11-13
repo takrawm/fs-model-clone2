@@ -52,7 +52,7 @@ type BalanceChangeRule = Extract<Rule, { type: "BALANCE_CHANGE" }>;
  */
 type RuleHandlerFunction<T extends Rule> = (
   rule: T,
-  context: RuleHandlerContext
+  ruleHandlerContext: RuleHandlerContext
 ) => NodeId;
 
 /**
@@ -73,9 +73,9 @@ type BalanceChangeRuleHandler = RuleHandlerFunction<BalanceChangeRule>;
  * パターン: 終端ノード作成（定数値）
  * 固定値を設定します
  */
-export const handleInput: InputRuleHandler = (rule, context) => {
+export const handleInput: InputRuleHandler = (rule, ruleHandlerContext) => {
   // 使用するプロパティを分割代入で取得
-  const { accountId, periodId, nodeRegistry } = context;
+  const { accountId, periodId, nodeRegistry } = ruleHandlerContext;
   // makeFFの型注釈は、(reg: NodeRegistry, value: number, label: string) => NodeId;
   return makeFF(
     nodeRegistry,
@@ -85,12 +85,53 @@ export const handleInput: InputRuleHandler = (rule, context) => {
 };
 
 /**
+ * GROWTH_RATEルールのハンドラー
+ * パターン: 式構築（単一演算）
+ * 前期値に成長率を掛けます
+ * 計算式: 前期値 × (1 + 成長率)
+ */
+export const handleGrowthRate: GrowthRateRuleHandler = (
+  rule,
+  ruleHandlerContext
+) => {
+  const { accountId, buildFormula } = ruleHandlerContext;
+  return buildFormula({
+    type: "BINARY_OP",
+    op: "MUL",
+    left: { type: "ACCOUNT", id: accountId, period: { offset: -1 } },
+    right: { type: "NUMBER", value: 1 + rule.rate },
+  });
+};
+
+/**
+ * PERCENTAGEルールのハンドラー
+ * パターン: 式構築（単一演算）
+ * 参照科目に割合を掛けます
+ * 計算式: 参照科目 × 割合
+ */
+export const handlePercentage: PercentageRuleHandler = (
+  rule,
+  ruleHandlerContext
+) => {
+  const { buildFormula } = ruleHandlerContext;
+  return buildFormula({
+    type: "BINARY_OP",
+    op: "MUL",
+    left: { type: "ACCOUNT", id: rule.ref },
+    right: { type: "NUMBER", value: rule.percentage },
+  });
+};
+
+/**
  * CALCULATIONルールのハンドラー
  * パターン: 式構築（定義済み式の委譲）
  * 計算式を評価します
  */
-export const handleCalculation: CalculationRuleHandler = (rule, context) => {
-  const { buildFormula } = context;
+export const handleCalculation: CalculationRuleHandler = (
+  rule,
+  ruleHandlerContext
+) => {
+  const { buildFormula } = ruleHandlerContext;
   return buildFormula(rule.expression);
 };
 
@@ -99,8 +140,11 @@ export const handleCalculation: CalculationRuleHandler = (rule, context) => {
  * パターン: 科目参照（buildNode）
  * 前期の値をそのまま使用します
  */
-export const handleFixedValue: FixedValueRuleHandler = (_rule, context) => {
-  const { accountId, resolvePeriodId, buildNode } = context;
+export const handleFixedValue: FixedValueRuleHandler = (
+  _rule,
+  ruleHandlerContext
+) => {
+  const { accountId, resolvePeriodId, buildNode } = ruleHandlerContext;
   const prevPeriodId = resolvePeriodId({
     offset: -1,
   });
@@ -112,8 +156,11 @@ export const handleFixedValue: FixedValueRuleHandler = (_rule, context) => {
  * パターン: 科目参照（buildNode）
  * 他の科目を参照します
  */
-export const handleReference: ReferenceRuleHandler = (rule, context) => {
-  const { periodId, buildNode } = context;
+export const handleReference: ReferenceRuleHandler = (
+  rule,
+  ruleHandlerContext
+) => {
+  const { periodId, buildNode } = ruleHandlerContext;
   return buildNode(periodId, rule.ref);
 };
 
@@ -125,21 +172,23 @@ export const handleReference: ReferenceRuleHandler = (rule, context) => {
  */
 export const handleProportionate: ProportionateRuleHandler = (
   rule,
-  context
+  ruleHandlerContext
 ) => {
-  const { accountId, buildFormula } = context;
+  const { accountId, buildFormula } = ruleHandlerContext;
   const driverAccount = rule.ref;
 
   // 前期値 × (ドライバー当期値 / ドライバー前期値)
   return buildFormula({
-    type: "MUL",
+    type: "BINARY_OP",
+    op: "MUL",
     left: {
       type: "ACCOUNT",
       id: accountId,
       period: { offset: -1 },
     },
     right: {
-      type: "DIV",
+      type: "BINARY_OP",
+      op: "DIV",
       left: {
         type: "ACCOUNT",
         id: driverAccount,
@@ -154,36 +203,6 @@ export const handleProportionate: ProportionateRuleHandler = (
 };
 
 /**
- * GROWTH_RATEルールのハンドラー
- * パターン: 式構築（単一演算）
- * 前期値に成長率を掛けます
- * 計算式: 前期値 × (1 + 成長率)
- */
-export const handleGrowthRate: GrowthRateRuleHandler = (rule, context) => {
-  const { accountId, buildFormula } = context;
-  return buildFormula({
-    type: "MUL",
-    left: { type: "ACCOUNT", id: accountId, period: { offset: -1 } },
-    right: { type: "NUMBER", value: 1 + rule.rate },
-  });
-};
-
-/**
- * PERCENTAGEルールのハンドラー
- * パターン: 式構築（単一演算）
- * 参照科目に割合を掛けます
- * 計算式: 参照科目 × 割合
- */
-export const handlePercentage: PercentageRuleHandler = (rule, context) => {
-  const { buildFormula } = context;
-  return buildFormula({
-    type: "MUL",
-    left: { type: "ACCOUNT", id: rule.ref },
-    right: { type: "NUMBER", value: rule.percentage },
-  });
-};
-
-/**
  * BALANCE_CHANGEルールのハンドラー
  * パターン: 式構築（複雑な式の構築）
  * 前期末残高にフロー（増減）を加算します
@@ -191,9 +210,9 @@ export const handlePercentage: PercentageRuleHandler = (rule, context) => {
  */
 export const handleBalanceChange: BalanceChangeRuleHandler = (
   rule,
-  context
+  ruleHandlerContext
 ) => {
-  const { accountId, buildFormula } = context;
+  const { accountId, buildFormula } = ruleHandlerContext;
 
   // flowAccounts（当期増減）の合計式を構築
   const flowAccountsTotal = rule.flowAccounts.reduce<FormulaNode | null>(
@@ -206,13 +225,15 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
         flow.sign === "PLUS"
           ? baseNode
           : {
-              type: "MUL",
+              type: "BINARY_OP",
+              op: "MUL",
               left: baseNode,
               right: { type: "NUMBER", value: -1 },
             };
       if (!acc) return signedNode;
       return {
-        type: "ADD",
+        type: "BINARY_OP",
+        op: "ADD",
         left: acc,
         right: signedNode,
       };
@@ -222,7 +243,8 @@ export const handleBalanceChange: BalanceChangeRuleHandler = (
 
   // 前期末残高 + flowAccounts合計の式を構築
   return buildFormula({
-    type: "ADD",
+    type: "BINARY_OP",
+    op: "ADD",
     left: {
       type: "ACCOUNT",
       id: accountId,

@@ -12,7 +12,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   revenue: {
     type: "CALCULATION",
     expression: {
-      type: "MUL",
+      type: "BINARY_OP",
+      op: "MUL",
       left: { type: "ACCOUNT", id: "unit_price" satisfies AccountId },
       right: { type: "ACCOUNT", id: "quantity" satisfies AccountId },
     },
@@ -25,7 +26,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   gross_profit: {
     type: "CALCULATION",
     expression: {
-      type: "SUB",
+      type: "BINARY_OP",
+      op: "SUB",
       left: { type: "ACCOUNT", id: "revenue" satisfies AccountId },
       right: { type: "ACCOUNT", id: "cogs" satisfies AccountId },
     },
@@ -42,7 +44,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   total_opex: {
     type: "CALCULATION",
     expression: {
-      type: "ADD",
+      type: "BINARY_OP",
+      op: "ADD",
       left: { type: "ACCOUNT", id: "depreciation" satisfies AccountId },
       right: { type: "ACCOUNT", id: "other_opex" satisfies AccountId },
     },
@@ -50,7 +53,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   operating_profit: {
     type: "CALCULATION",
     expression: {
-      type: "SUB",
+      type: "BINARY_OP",
+      op: "SUB",
       left: { type: "ACCOUNT", id: "gross_profit" satisfies AccountId },
       right: { type: "ACCOUNT", id: "total_opex" satisfies AccountId },
     },
@@ -58,7 +62,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   income_tax: {
     type: "CALCULATION",
     expression: {
-      type: "MUL",
+      type: "BINARY_OP",
+      op: "MUL",
       left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
       right: { type: "NUMBER", value: 0.3 },
     },
@@ -66,7 +71,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   net_income: {
     type: "CALCULATION",
     expression: {
-      type: "SUB",
+      type: "BINARY_OP",
+      op: "SUB",
       left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
       right: { type: "ACCOUNT", id: "income_tax" satisfies AccountId },
     },
@@ -94,10 +100,12 @@ export const forecastRules: Record<AccountId, Rule> = {
   assets_total: {
     type: "CALCULATION",
     expression: {
-      type: "ADD",
+      type: "BINARY_OP",
+      op: "ADD",
       left: { type: "ACCOUNT", id: "cash" satisfies AccountId },
       right: {
-        type: "ADD",
+        type: "BINARY_OP",
+        op: "ADD",
         left: { type: "ACCOUNT", id: "account_receivable" satisfies AccountId },
         right: { type: "ACCOUNT", id: "tangible_assets" satisfies AccountId },
       },
@@ -114,7 +122,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   liabilities_total: {
     type: "CALCULATION",
     expression: {
-      type: "ADD",
+      type: "BINARY_OP",
+      op: "ADD",
       left: { type: "ACCOUNT", id: "account_payable" satisfies AccountId },
       right: { type: "ACCOUNT", id: "bills_payable" satisfies AccountId },
     },
@@ -127,7 +136,8 @@ export const forecastRules: Record<AccountId, Rule> = {
   equity_and_liabilities_total: {
     type: "CALCULATION",
     expression: {
-      type: "ADD",
+      type: "BINARY_OP",
+      op: "ADD",
       left: { type: "ACCOUNT", id: "liabilities_total" satisfies AccountId },
       right: { type: "ACCOUNT", id: "retained_earnings" satisfies AccountId },
     },

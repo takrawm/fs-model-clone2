@@ -1,64 +1,11 @@
 // src/model/types.ts
 
-/**
- * 型定義ファイル
- *
- * このファイルは、財務モデリングシステムで使用されるすべてのデータ構造を定義します。
- * TypeScriptの型システムを活用することで、コンパイル時に多くのエラーを検出でき、
- * 実行時の予期しない動作を防ぐことができます。
- *
- * 特に重要なのは、FormulaNode型です。これは計算式を構造化して表現するための
- * 型で、再帰的な構造を持っています。この型により、任意の複雑さの数式を
- * 型安全に扱うことができます。
- */
-
-/**
- * ノードID
- *
- * ASTノードを一意に識別するための文字列です。レジストリ内でノードを検索する際の
- * キーとして使用されます。通常は連番（"1", "2", "3", ...）で管理されますが、
- * 文字列型にすることで将来的な拡張性を確保しています。
- */
 export type NodeId = string;
 
-/**
- * 演算子
- *
- * 四則演算を表現する型です。これらの演算子は、TTノード（二項演算ノード）で
- * 使用され、評価時にどの計算を行うべきかを決定します。
- *
- * - ADD: 加算（+）
- * - SUB: 減算（-）
- * - MUL: 乗算（×）
- * - DIV: 除算（÷）
- */
 export type Op = "ADD" | "SUB" | "MUL" | "DIV";
 
 export type FsType = "PL" | "BS" | "CF" | "PP&E" | "OTHER";
 
-/**
- * ASTノード
- *
- * 抽象構文木（Abstract Syntax Tree）を構成する個々のノードです。
- * すべてのノードは一意のIDを持ち、以下の2種類に分類されます。
- *
- * 1. FFノード（終端ノード）: 値を直接持つノード
- *    - value プロパティに数値が格納されています
- *    - 他のノードへの参照を持ちません
- *    - 例: 定数（0.35、360）や実績値（500000）
- *
- * 2. TTノード（二項演算ノード）: 2つの子ノードを演算で結合するノード
- *    - ref1、ref2 プロパティで左右の子ノードを参照します
- *    - operator プロパティで演算の種類を指定します
- *    - 例: revenue = unit_price × quantity
- *
- * label プロパティは、デバッグやログ出力の際にノードの内容を
- * 人間が理解できる形で表示するために使用されます。
- *
- * Discriminated Unionを使用することで、型安全性を向上させています。
- * typeプロパティにより、TypeScriptが自動的にノードの種類を判別し、
- * 適切なプロパティにアクセスできることを保証します。
- */
 export type Node = FFNode | TTNode;
 
 /**
@@ -89,50 +36,6 @@ export interface TTNode {
   label?: string;
 }
 
-/**
- * 計算式を構造化して表現するための型
- *
- * これは、財務計算の核心となる型定義です。計算式をツリー構造として表現することで、
- * 演算の優先順位を明確にし、複雑な計算を正確に実行できます。
- *
- * FormulaNodeは3つの基本的な要素から構成されます。
- *
- * 1. NUMBER: 定数値
- *    税率、回転日数、成長率など、計算式の中で使用される固定の数値です。
- *    例: { type: 'NUMBER', value: 0.35 }
- *
- * 2. ACCOUNT: 科目参照
- *    他の科目の計算結果を参照します。この参照により、科目間の依存関係が
- *    形成されます。periodプロパティで、当期の値を参照するか、前期の実績値を
- *    参照するかを指定できます。
- *    例: { type: 'ACCOUNT', id: 'revenue' }
- *    例: { type: 'ACCOUNT', id: 'revenue', period: { offset: -1 } }
- *
- * 3. 二項演算: 2つの式を演算子で結合
- *    左右の部分式（これも FormulaNode）を演算で結合します。
- *    部分式自体がさらに複雑な構造を持つことができるため、
- *    任意の深さのツリーを構築できます。
- *    例: { type: 'ADD', left: {...}, right: {...} }
- *
- * この型の再帰的な性質により、以下のような複雑な式も表現できます。
- *
- * 「(売上高 - 売上原価) × (1 - 税率)」という式は：
- * {
- *   type: 'MUL',
- *   left: {
- *     type: 'SUB',
- *     left: { type: 'ACCOUNT', id: 'revenue' },
- *     right: { type: 'ACCOUNT', id: 'cogs' }
- *   },
- *   right: {
- *     type: 'SUB',
- *     left: { type: 'NUMBER', value: 1 },
- *     right: { type: 'NUMBER', value: 0.35 }
- *   }
- * }
- *
- * このように表現されます。
- */
 export type FormulaNode = NumberNode | AccountNode | BinaryOpNode;
 
 /**
@@ -219,10 +122,12 @@ export interface AccountNode {
  * 必要がありますが、これは以下の構造で表現されます。
  *
  * {
- *   type: 'ADD',
+ *   type: 'BINARY_OP',
+ *   op: 'ADD',
  *   left: { type: 'ACCOUNT', id: 'A' },
  *   right: {
- *     type: 'MUL',
+ *     type: 'BINARY_OP',
+ *     op: 'MUL',
  *     left: { type: 'ACCOUNT', id: 'B' },
  *     right: { type: 'ACCOUNT', id: 'C' }
  *   }
@@ -232,7 +137,8 @@ export interface AccountNode {
  * 自動的に先に評価されます。
  */
 export interface BinaryOpNode {
-  type: "ADD" | "SUB" | "MUL" | "DIV";
+  type: "BINARY_OP";
+  op: "ADD" | "SUB" | "MUL" | "DIV";
   left: FormulaNode;
   right: FormulaNode;
 }

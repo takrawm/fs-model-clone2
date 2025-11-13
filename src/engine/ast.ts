@@ -3,35 +3,6 @@
 import { NodeRegistry } from "../model/registry.ts";
 import type { NodeId, Op } from "../model/types.ts";
 
-/**
- * FFノード（終端ノード）を作成します
- *
- * FFは「Fixed/Final」の略で、値を直接持つノードを意味します。
- * これは計算のツリー構造における「葉」に相当し、それ以上分解できない
- * 最小単位です。
- *
- * FFノードは以下の場面で使用されます。
- *
- * 1. 実績値: 前期の実際の数値（例: 前期の売上500,000円）
- * 2. 入力値: ユーザーが指定した予測値（例: 次期の単価1,050円）
- * 3. 定数: 計算式で使う固定値（例: 税率0.35、回転日数360）
- *
- * FFノードは依存関係を持たないため、常に最初に評価できます。
- * トポロジカルソートでは、これらのノードが必ず最初に並びます。
- *
- * @param reg - ノードを登録するレジストリ
- * @param value - ノードが持つ数値
- * @param label - デバッグ用のラベル（例: "売上高(前期:500000)"）
- * @returns 作成されたノードのID
- *
- * @example
- * // 税率35%を表すノードを作成
- * const taxRateNode = makeFF(registry, 0.35, "税率(0.35)");
- *
- * @example
- * // 前期の売上高を表すノードを作成
- * const prevRevenue = makeFF(registry, 500000, "売上高(前期:500000)");
- */
 export function makeFF(
   reg: NodeRegistry,
   value: number,
@@ -51,46 +22,6 @@ export function makeFF(
   return id;
 }
 
-/**
- * TTノード（二項演算ノード）を作成します
- *
- * TTは「Two Terms」の略で、2つの子ノードを演算で結合するノードです。
- * これは計算のツリー構造における「枝」に相当し、下位の計算結果を
- * 組み合わせて新しい値を生成します。
- *
- * TTノードは、あらゆる計算式の構成要素となります。
- *
- * シンプルな例:
- * - 「売上高 = 単価 × 数量」
- *   → MULノードで、単価ノードと数量ノードを結合
- *
- * 複雑な例:
- * - 「税引後利益 = (売上 - 原価 - 経費) × (1 - 税率)」
- *   → 複数のSUBノードとMULノードを階層的に組み合わせる
- *
- * TTノードは、左右の子ノード（left, right）のIDのみを保持します。
- * 実際のノードオブジェクトへの参照は持ちません。これにより、
- * 循環参照を防ぎつつ、複雑なグラフ構造を表現できます。
- *
- * @param reg - ノードを登録するレジストリ
- * @param left - 左側の子ノードのID
- * @param right - 右側の子ノードのID
- * @param operator - 演算子（ADD, SUB, MUL, DIV）
- * @param label - デバッグ用のラベル（例: "売上総利益(売上-原価)"）
- * @returns 作成されたノードのID
- *
- * @example
- * // 「売上高 = 単価 × 数量」を表すノードを作成
- * const unitPriceNode = makeFF(registry, 1050, "単価");
- * const quantityNode = makeFF(registry, 550, "数量");
- * const revenueNode = makeTT(
- *   registry,
- *   unitPriceNode,
- *   quantityNode,
- *   'MUL',
- *   "売上高(単価×数量)"
- * );
- */
 export function makeTT(
   reg: NodeRegistry,
   left: NodeId,
