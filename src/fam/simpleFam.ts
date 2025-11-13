@@ -358,6 +358,28 @@ export class SimpleFAM {
     this.values.set(this.createValueKeyString(periodId, accountId), value);
   }
 
+  /**
+   * 指定された期間と科目の値を取得します
+   */
+  getValue(periodId: PeriodId, accountId: AccountId): number | undefined {
+    const key = this.createValueKeyString(periodId, accountId);
+    return this.values.get(key);
+  }
+
+  /**
+   * 指定された期間の全ての値を取得します
+   */
+  getPeriodValues(periodId: PeriodId): Record<AccountId, number> {
+    const result: Record<AccountId, number> = {} as Record<AccountId, number>;
+    for (const [key, value] of this.values.entries()) {
+      if (key.startsWith(`${periodId}::`)) {
+        const accountId = key.split("::")[1] as AccountId;
+        result[accountId] = value;
+      }
+    }
+    return result;
+  }
+
   private createNextPeriod(latest: Period): Period {
     let nextYear = latest.year;
     let nextMonth = latest.month;

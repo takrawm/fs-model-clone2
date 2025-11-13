@@ -7,12 +7,8 @@ function App() {
 
   return (
     <div className="app-container">
-      <h1>簡易財務モデル</h1>
-      <p>
-        ボタンを押すと <code>fam.compute()</code>{" "}
-        が実行され、2026-3-ANNUALの予測が計算されます。
-      </p>
-      <button onClick={runCompute}>Compute 2026-3-ANNUAL</button>
+      <h1>Simple Financial Model (Canvas)</h1>
+      <button onClick={runCompute}>Compute Next Year (2026-3)</button>
 
       <div className="grid-container">
         {rows.length > 0 && <StatementTable columns={columns} rows={rows} />}

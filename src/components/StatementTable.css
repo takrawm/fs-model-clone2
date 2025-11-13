@@ -1,0 +1,24 @@
+/* 財務諸表セクションヘッダーのスタイル */
+.rdg .fs-header-row {
+  background-color: #2a2a2a;
+  font-weight: bold;
+}
+
+.rdg .fs-header-cell {
+  background-color: #2a2a2a;
+  font-weight: bold;
+}
+
+/* CF派生科目のスタイル */
+.rdg .cf-source-cell {
+  color: #a0cfff;
+}
+
+/* 合計行のスタイル */
+.rdg .total-row {
+  border-top: 1px solid #ffffff;
+}
+
+.rdg .total-row-cell {
+  border-top: 1px solid #ffffff;
+}
