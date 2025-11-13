@@ -32,7 +32,7 @@ const ppeAccounts = allAccounts.filter((account) => account.fs_type === "PP&E");
 
 // KPI科目（単価・数量）を分離
 const kpiAccounts = plAccounts.filter((account) =>
-  /単価|数量/.test(account.AccountName ?? account.id)
+  /単価|数量/.test(account.accountName ?? account.id)
 );
 const monetaryPlAccounts = plAccounts.filter(
   (account) => !kpiAccounts.includes(account)
@@ -45,23 +45,23 @@ if (actualPrevious) {
   // PL（損益計算書）
   console.log("\n【損益計算書】");
   for (const account of kpiAccounts) {
-    const unit = /数量/.test(account.AccountName ?? account.id) ? "個" : "円";
-    printKPI(account.AccountName, actualPrevious[account.id], unit);
+    const unit = /数量/.test(account.accountName ?? account.id) ? "個" : "円";
+    printKPI(account.accountName, actualPrevious[account.id], unit);
   }
   for (const account of monetaryPlAccounts) {
-    printAccount(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.accountName, actualPrevious[account.id]);
   }
 
   // BS（貸借対照表）
   console.log("\n【貸借対照表】");
   for (const account of bsAccounts) {
-    printAccount(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.accountName, actualPrevious[account.id]);
   }
 
   // CF（キャッシュフロー計算書）
   console.log("\n【キャッシュフロー計算書】");
   for (const account of cfAccounts) {
-    printAccount(account.AccountName, actualPrevious[account.id]);
+    printAccount(account.accountName, actualPrevious[account.id]);
   }
 } else {
   console.log(`\n=== ${previousPeriodId} 実績 ===`);
@@ -74,12 +74,12 @@ console.log(`\n=== ${forecastPeriodId} 予測結果 ===`);
 // PL（損益計算書）
 console.log("\n【損益計算書】");
 for (const account of kpiAccounts) {
-  const unit = /数量/.test(account.AccountName ?? account.id) ? "個" : "円";
-  printKPI(account.AccountName, forecastValues[account.id], unit);
+  const unit = /数量/.test(account.accountName ?? account.id) ? "個" : "円";
+  printKPI(account.accountName, forecastValues[account.id], unit);
 }
 for (const account of monetaryPlAccounts) {
   printAccount(
-    account.AccountName,
+    account.accountName,
     forecastValues[account.id],
     actualPrevious?.[account.id]
   );
@@ -89,7 +89,7 @@ for (const account of monetaryPlAccounts) {
 console.log("\n【貸借対照表】");
 for (const account of bsAccounts) {
   printAccount(
-    account.AccountName,
+    account.accountName,
     forecastValues[account.id],
     actualPrevious?.[account.id]
   );
@@ -99,7 +99,7 @@ for (const account of bsAccounts) {
 console.log("\n【キャッシュフロー計算書】");
 for (const account of cfAccounts) {
   printAccount(
-    account.AccountName,
+    account.accountName,
     forecastValues[account.id],
     actualPrevious?.[account.id]
   );
@@ -110,7 +110,7 @@ if (ppeAccounts.length > 0) {
   console.log("\n【設備関連】");
   for (const account of ppeAccounts) {
     printAccount(
-      account.AccountName,
+      account.accountName,
       forecastValues[account.id],
       actualPrevious?.[account.id]
     );

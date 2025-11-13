@@ -13,10 +13,9 @@ import type {
 
 /**
  * ルールハンドラーのコンテキスト
- * 現在の設計は：
- * すべてのハンドラーが共通のRuleHandlerContext型を受け取る
- * 各ハンドラーは必要なプロパティだけを使用する
- * 使わないプロパティがあっても問題ない
+ * ruleHandler関数（handleGrowthRateなど）は完全に独立した純粋な関数として定義されている。
+ * この関数はthisを持たず、SimpleFamインスタンスの内部状態に直接アクセスする手段はない。
+ * SimpleFamクラスのbuildNodeForAccountメソッド内で構築されるhandlerContextは、この二つの世界を繋ぐ橋渡し
  */
 export interface RuleHandlerContext {
   periodId: PeriodId;
@@ -128,11 +127,13 @@ export const handlePercentage: PercentageRuleHandler = (
  * 計算式を評価します
  */
 export const handleCalculation: CalculationRuleHandler = (
-  rule,
+  rule, // { type: "CALCUlATION", formulaNode: FormulaNode}
   ruleHandlerContext
 ) => {
   const { buildFormula } = ruleHandlerContext;
-  return buildFormula(rule.expression);
+  // handleCalculationは任意のFormulaNode構造を受け取れるため、rule.formulaNodeをそのままbuildFormulaに渡す。
+  // 他のハンドラーは特定の構造を構築するため、ハンドラー内でFormulaNodeを組み立てる
+  return buildFormula(rule.formulaNode);
 };
 
 /**

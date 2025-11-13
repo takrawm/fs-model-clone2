@@ -109,7 +109,7 @@ export interface SeedData {
 ### 4.3 テーブル表示コンポーネント (`src/components/StatementTable.tsx`)
 
 - `react-data-grid`を使用
-- 行: 勘定科目（AccountName, accountId）
+- 行: 勘定科目（accountName, accountId）
 - 列: 年度（FY:2020, FY:2021, ...）
 - セル: 計算結果の数値
 - フォーマット: 数値は 3 桁区切り、マイナスは括弧表示など

@@ -16,6 +16,12 @@ import type {
   ValueKeyString,
 } from "../model/types.ts";
 import { createPeriod } from "../utils/periodUtils.ts";
+import {
+  getPreviousPeriodDifferenceForAccount,
+  multiplyAccountBySign,
+  multiplyFormulaNodeBySign,
+  sumFormulaNodes,
+} from "./cfRuleBuilders.ts";
 import { ruleHandlers } from "./ruleHandlers.ts";
 import type { RuleHandlerContext } from "./ruleHandlers.ts";
 
@@ -206,8 +212,8 @@ export class SimpleFAM {
       periodId,
       accountId,
       // buildNodeForAccountメソッドはインスタンスメソッドなので、
-      // このメソッドが実行されている間、thisはSimpleFAMのインスタンスを指しています。
-      // アロー関数はこのthisをキャプチャして保持します。
+      // このメソッドが実行されている間、thisはSimpleFAMのインスタンスを指す。
+      // アロー関数はこのthisをキャプチャして保持する。
       nodeRegistry: this.nodeRegistry,
       buildNode: (pId, aId) => this.buildNodeForAccount(pId, aId),
       buildFormula: (formulaNode) =>
@@ -239,41 +245,41 @@ export class SimpleFAM {
    * このメソッドは、RuleHandlerContextのbuildFormulaから呼び出されます。
    * ctxパラメータが必要なため、内部実装メソッドとして分離しています。
    *
-   * @param formula - 計算式のノード
+   * @param formulaNode - 計算式のノード
    * @param ctx - 期間と科目のコンテキスト情報
    * @returns 構築されたASTノードのID
    */
   private buildFormulaNode(
-    formula: FormulaNode,
+    formulaNode: FormulaNode,
     ctx: {
       periodId: PeriodId;
       accountId: AccountId;
     }
   ): NodeId {
     const labelPrefix = `${ctx.accountId}@${ctx.periodId}`;
-    switch (formula.type) {
+    switch (formulaNode.type) {
       case "NUMBER": {
         // makeFF()もNodeIdを返す
         return makeFF(
           this.nodeRegistry,
-          formula.value,
-          `${labelPrefix}:const(${formula.value})`
+          formulaNode.value,
+          `${labelPrefix}:const(${formulaNode.value})`
         );
       }
 
       case "ACCOUNT": {
         const targetPeriodId = this.resolvePeriodIdWithBase(
           ctx.periodId,
-          formula.period
+          formulaNode.period
         );
-        // this.buildNodeForAccount(targetPeriodId, formula.id)もNodeIdを返す
-        return this.buildNodeForAccount(targetPeriodId, formula.id);
+        // this.buildNodeForAccount(targetPeriodId, formulaNode.id)もNodeIdを返す
+        return this.buildNodeForAccount(targetPeriodId, formulaNode.id);
       }
 
       case "BINARY_OP": {
-        const leftNode = this.buildFormulaNode(formula.left, ctx);
-        const rightNode = this.buildFormulaNode(formula.right, ctx);
-        const operator = formula.op;
+        const leftNode = this.buildFormulaNode(formulaNode.left, ctx);
+        const rightNode = this.buildFormulaNode(formulaNode.right, ctx);
+        const operator = formulaNode.op;
         // makeTT()もNodeIdを返す
         return makeTT(
           this.nodeRegistry,
@@ -286,8 +292,10 @@ export class SimpleFAM {
 
       default: {
         return assertNever(
-          formula as never,
-          `未対応の式タイプ: ${(formula as any).type} (context: ${labelPrefix})`
+          formulaNode as never,
+          `未対応の式タイプ: ${
+            (formulaNode as any).type
+          } (context: ${labelPrefix})`
         );
       }
     }
@@ -350,11 +358,6 @@ export class SimpleFAM {
     this.values.set(this.createValueKeyString(periodId, accountId), value);
   }
 
-  private getHistoricalValue(periodId: PeriodId, accountId: AccountId): number {
-    const key = this.createValueKeyString(periodId, accountId);
-    return this.values.get(key) ?? 0;
-  }
-
   private createNextPeriod(latest: Period): Period {
     let nextYear = latest.year;
     let nextMonth = latest.month;
@@ -392,7 +395,7 @@ export class SimpleFAM {
 
     const cfRuleItems: FormulaNode[] = [];
     let baseProfitAccountId: AccountId | null = null;
-
+    // values()はJavaScriptのMapの組み込みメソッドです。
     for (const account of this.accounts.values()) {
       // 1. CF計算の起点となる利益を特定
       if (account.isCfBaseProfit) {
@@ -414,7 +417,7 @@ export class SimpleFAM {
         if (!this.accounts.has(cfAccountId)) {
           this.accounts.set(cfAccountId, {
             id: cfAccountId,
-            AccountName: `${account.AccountName}増減(CF)`,
+            accountName: `${account.accountName}増減(CF)`,
             fs_type: "CF",
             ignoredForCf: true,
           });
@@ -423,21 +426,13 @@ export class SimpleFAM {
         // 符号： 資産(isCredit: false)の増加(Diff=+)はCF減(-)
         //       負債(isCredit: true) の増加(Diff=+)はCF増(+)
         const sign = account.isCredit ?? false ? 1 : -1;
-        const diffExpr: FormulaNode = {
-          type: "BINARY_OP",
-          op: "SUB",
-          left: { type: "ACCOUNT", id: account.id },
-          right: { type: "ACCOUNT", id: account.id, period: { offset: -1 } },
-        };
+        const diffFormulaNode = getPreviousPeriodDifferenceForAccount(
+          account.id
+        );
 
         this.rules[cfAccountId] = {
           type: "CALCULATION",
-          expression: {
-            type: "BINARY_OP",
-            op: "MUL",
-            left: diffExpr,
-            right: { type: "NUMBER", value: sign },
-          },
+          formulaNode: multiplyFormulaNodeBySign(diffFormulaNode, sign),
         };
         cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
       }
@@ -458,7 +453,7 @@ export class SimpleFAM {
             if (!this.accounts.has(cfAccountId)) {
               this.accounts.set(cfAccountId, {
                 id: cfAccountId,
-                AccountName: `${flowAccount.AccountName}調整(CF)`,
+                accountName: `${flowAccount.accountName}調整(CF)`,
                 fs_type: "CF",
                 ignoredForCf: true,
               });
@@ -473,12 +468,7 @@ export class SimpleFAM {
 
             this.rules[cfAccountId] = {
               type: "CALCULATION",
-              expression: {
-                type: "BINARY_OP",
-                op: "MUL",
-                left: { type: "ACCOUNT", id: flow.ref },
-                right: { type: "NUMBER", value: cfSign },
-              },
+              formulaNode: multiplyAccountBySign(flow.ref, cfSign),
             };
             cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
           }
@@ -494,19 +484,14 @@ export class SimpleFAM {
     }
 
     // `net_income + (cf_item1 + cf_item2 + ...)` の式を構築
-    const cfSummaryExpr = cfRuleItems.reduce<FormulaNode>(
-      (acc, item) => ({
-        type: "BINARY_OP",
-        op: "ADD",
-        left: acc,
-        right: item,
-      }),
+    const cfSummaryFormulaNode = sumFormulaNodes(
+      cfRuleItems,
       { type: "ACCOUNT", id: baseProfitAccountId } // 起点
     );
 
     this.rules["cash_change_cf"] = {
       type: "CALCULATION",
-      expression: cfSummaryExpr,
+      formulaNode: cfSummaryFormulaNode,
     };
 
     // 5. cashのルールをcash_change_cfを含むように更新

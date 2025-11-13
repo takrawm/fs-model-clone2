@@ -11,7 +11,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   revenue: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "MUL",
       left: { type: "ACCOUNT", id: "unit_price" satisfies AccountId },
@@ -25,7 +25,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   gross_profit: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "SUB",
       left: { type: "ACCOUNT", id: "revenue" satisfies AccountId },
@@ -43,7 +43,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   total_opex: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "ADD",
       left: { type: "ACCOUNT", id: "depreciation" satisfies AccountId },
@@ -52,7 +52,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   operating_profit: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "SUB",
       left: { type: "ACCOUNT", id: "gross_profit" satisfies AccountId },
@@ -61,7 +61,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   income_tax: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "MUL",
       left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
@@ -70,7 +70,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   net_income: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "SUB",
       left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
@@ -99,7 +99,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   assets_total: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "ADD",
       left: { type: "ACCOUNT", id: "cash" satisfies AccountId },
@@ -121,7 +121,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   },
   liabilities_total: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "ADD",
       left: { type: "ACCOUNT", id: "account_payable" satisfies AccountId },
@@ -135,7 +135,7 @@ export const forecastRules: Record<AccountId, Rule> = {
   // 負債・純資産合計（貸借一致確認用）
   equity_and_liabilities_total: {
     type: "CALCULATION",
-    expression: {
+    formulaNode: {
       type: "BINARY_OP",
       op: "ADD",
       left: { type: "ACCOUNT", id: "liabilities_total" satisfies AccountId },

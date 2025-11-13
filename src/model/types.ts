@@ -157,8 +157,8 @@ export type AccountId = string;
 
 export interface Account {
   id: AccountId;
-  AccountName: string;
-  GlobalAccountID?: string | null;
+  accountName: string;
+  globalAccountId?: string | null;
   fs_type?: FsType | null;
   parent_id?: AccountId | null;
   isCredit?: boolean | null;
@@ -230,7 +230,7 @@ export interface Value {
  */
 export type Rule =
   | { type: "INPUT"; value: number }
-  | { type: "CALCULATION"; expression: FormulaNode }
+  | { type: "CALCULATION"; formulaNode: FormulaNode }
   | { type: "GROWTH_RATE"; rate: number }
   | { type: "PERCENTAGE"; percentage: number; ref: AccountId }
   | { type: "REFERENCE"; ref: AccountId }
