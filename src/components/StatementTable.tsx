@@ -38,10 +38,62 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
         // 期間列のフォーマッター
         (newCol as any).formatter = ({ row }: { row: Row }) => {
           if (row.rowType === "fs-header") return "";
-          // col.keyは動的な値（例: "2025-3-ANNUAL"）
-          // AccountRowの場合のみ期間の値が存在する
+
+          const value = row[col.key as string];
+
+          // バランスチェック行
+          if (row.rowType === "balance-check") {
+            if (typeof value === "number") {
+              const isBalanced = Math.abs(value) < 0.01;
+              return (
+                <div
+                  style={{
+                    textAlign: "right",
+                    paddingRight: "10px",
+                    color: isBalanced ? "green" : "red",
+                  }}
+                >
+                  {isBalanced ? "一致" : value.toLocaleString()}
+                </div>
+              );
+            }
+            return "-";
+          }
+
+          // 比率行
+          if (row.rowType === "ratio") {
+            if (typeof value === "number") {
+              return (
+                <div style={{ textAlign: "right", paddingRight: "10px" }}>
+                  {value.toFixed(1)}%
+                </div>
+              );
+            }
+            return "-";
+          }
+
+          // 前期比行
+          if (row.rowType === "yoy") {
+            if (typeof value === "number") {
+              const color = value > 0 ? "green" : value < 0 ? "red" : "inherit";
+              return (
+                <div
+                  style={{
+                    textAlign: "right",
+                    paddingRight: "10px",
+                    color: color,
+                  }}
+                >
+                  {value > 0 ? "+" : ""}
+                  {value.toFixed(1)}%
+                </div>
+              );
+            }
+            return "-";
+          }
+
+          // AccountRowの場合
           if (row.rowType === "account") {
-            const value = row[col.key as string];
             if (typeof value === "number") {
               return (
                 <div style={{ textAlign: "right", paddingRight: "10px" }}>
@@ -50,6 +102,7 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
               );
             }
           }
+
           return "-";
         };
       }
@@ -70,6 +123,9 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
       style={{ height: "80vh" }}
       rowClass={(row) => {
         if (row.rowType === "fs-header") return "fs-header-row";
+        if (row.rowType === "balance-check") return "balance-check-row";
+        if (row.rowType === "ratio") return "ratio-row";
+        if (row.rowType === "yoy") return "yoy-row";
         return "";
       }}
     />

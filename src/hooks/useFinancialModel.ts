@@ -6,6 +6,8 @@ import { seedAccounts } from "../data/seedAccountData";
 import { seedPeriods } from "../data/seedPeriodData";
 import { seedActualValues } from "../data/seedValueData";
 import { getRuleDescription } from "../utils/ruleDescription";
+import { FinancialAnalysis } from "../utils/financialAnalysis";
+import { ratioConfig, yearOverYearConfig } from "../config/analysisConfig";
 import type {
   Account,
   AccountId,
@@ -37,7 +39,43 @@ export interface FsHeaderRow {
   fsType: FsType;
 }
 
-export type Row = AccountRow | FsHeaderRow;
+// バランスチェック行
+export interface BalanceCheckRow {
+  id: string;
+  accountName: string;
+  ruleDescription: string;
+  rowType: "balance-check";
+  fsType?: FsType;
+  [period: string]: string | number | undefined;
+}
+
+// 比率行
+export interface RatioRow {
+  id: string;
+  accountName: string;
+  ruleDescription: string;
+  rowType: "ratio";
+  fsType?: FsType;
+  ratioType: "vsAccount";
+  [period: string]: string | number | undefined;
+}
+
+// 前期比行
+export interface YearOverYearRow {
+  id: string;
+  accountName: string;
+  ruleDescription: string;
+  rowType: "yoy";
+  fsType?: FsType;
+  [period: string]: string | number | undefined;
+}
+
+export type Row =
+  | AccountRow
+  | FsHeaderRow
+  | BalanceCheckRow
+  | RatioRow
+  | YearOverYearRow;
 
 export function useFinancialModel() {
   // Column<Row>[]は、Row型の行データを扱うColumnの配列
@@ -131,6 +169,9 @@ export function useFinancialModel() {
     // 描画対象の行を計算
     const renderRows: Row[] = [];
 
+    // 財務分析インスタンスを作成（バランスチェックで使用）
+    const analysis = new FinancialAnalysis(fam);
+
     for (const fsType of fsTypeOrder) {
       const accountsForFsType = accountMapByFsType.get(fsType);
       if (!accountsForFsType) {
@@ -189,6 +230,28 @@ export function useFinancialModel() {
           fsType: fsType,
           ...periodValues,
         });
+
+        // BSセクションで、equity_and_liabilities_totalの直後にバランスチェック行を追加
+        if (fsType === "BS" && account.id === "equity_and_liabilities_total") {
+          const balanceCheckValues: Record<PeriodId, number> = {};
+          for (const period of periods) {
+            const balanceCheck = analysis.checkBalance(period.id);
+            if (balanceCheck) {
+              balanceCheckValues[period.id] = balanceCheck.difference;
+            }
+          }
+
+          if (Object.keys(balanceCheckValues).length > 0) {
+            renderRows.push({
+              id: "balance-check",
+              accountName: "バランスチェック",
+              ruleDescription: "",
+              rowType: "balance-check",
+              fsType: "BS",
+              ...balanceCheckValues,
+            });
+          }
+        }
       }
 
       // CFセクションの最後に cash_change_cf を追加
@@ -253,6 +316,47 @@ export function useFinancialModel() {
           return "";
         },
       });
+    }
+
+    // 各期間に対して比率計算を実行（analysisは既に作成済み）
+    for (const period of periods) {
+      // 比率計算（ユーザー指定の組み合わせのみ）
+      const ratios = analysis.calculateRatios(period.id, ratioConfig);
+      for (const ratio of ratios) {
+        renderRows.push({
+          id: `ratio-${ratio.baseAccountId}-${ratio.targetAccountId}`,
+          accountName: ratio.label,
+          ruleDescription: "",
+          rowType: "ratio",
+          ratioType: ratio.ratioType,
+          [period.id]: ratio.value,
+        });
+      }
+
+      // 前期比計算（2期間目以降、ユーザー指定の科目のみ）
+      if (periods.length > 1) {
+        const previousPeriodIndex = periods.indexOf(period) - 1;
+        if (previousPeriodIndex >= 0) {
+          const previousPeriod = periods[previousPeriodIndex];
+          const yoyResults = analysis.calculateYearOverYear(
+            period.id,
+            previousPeriod.id,
+            yearOverYearConfig
+          );
+
+          for (const yoy of yoyResults) {
+            renderRows.push({
+              id: `yoy-${yoy.accountId}-${period.id}`,
+              accountName: `${yoy.accountId} 前期比`,
+              ruleDescription: `${yoy.changeRate.toFixed(1)}% (${
+                yoy.changeAmount > 0 ? "+" : ""
+              }${yoy.changeAmount.toLocaleString()})`,
+              rowType: "yoy",
+              [period.id]: yoy.changeRate,
+            });
+          }
+        }
+      }
     }
 
     setColumns(newColumns);

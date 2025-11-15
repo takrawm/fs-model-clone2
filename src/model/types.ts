@@ -134,3 +134,16 @@ export type Rule =
         sign: "PLUS" | "MINUS";
       }>;
     };
+
+/**
+ * 比率計算の設定
+ * キー: 基準となる科目ID、値: 比率を計算したい科目IDの配列
+ * 例: { revenue: ["gross_profit", "operating_profit"], cogs: ["other_opex"] }
+ */
+export type RatioConfig = Record<AccountId, AccountId[]>;
+
+/**
+ * 前期比計算の設定
+ * 前期比を計算したい科目IDの配列
+ */
+export type YearOverYearConfig = AccountId[];
