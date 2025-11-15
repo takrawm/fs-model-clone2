@@ -11,37 +11,45 @@
   border-bottom: 2px solid #161849;
 }
 
-/* react-data-gridのヘッダーセルのスタイル */
-.rdg .rdg-header {
-  background-color: #1c1f5a;
-  color: #ffffff;
-  font-weight: 600;
-}
-
-.rdg .rdg-header .rdg-cell {
-  background-color: #1c1f5a;
-  color: #ffffff;
-  border-bottom: 2px solid #161849;
-}
-
 /* 財務諸表セクションヘッダーのスタイル */
 .rdg .fs-header-row {
-  background-color: #3d4280;
+  background-color: #51558f;
   font-weight: bold;
   color: #ffffff;
   border-bottom: 2px solid #1c1f5a;
 }
 
-.rdg .fs-header-cell {
-  background-color: #3d4280;
-  font-weight: bold;
+.rdg .fs-header-row .rdg-cell {
+  background-color: #51558f;
   color: #ffffff;
-  border-bottom: 2px solid #1c1f5a;
 }
 
-/* CF派生科目のスタイル */
-.rdg .cf-source-cell {
-  color: #0066cc;
+/* 比率・前期比行のスタイル */
+.rdg .ratio-row .rdg-cell,
+.rdg .yoy-row .rdg-cell {
+  color: #888;
+  font-style: italic;
+}
+
+/* accountName列の左パディング（通常行） */
+.rdg .rdg-cell .account-name {
+  padding-left: 20px;
+}
+
+/* ruleDescription列のスタイル */
+.rdg .rdg-cell .rule-description {
+  font-size: 12px;
+}
+
+/* 数値セルのスタイル */
+.rdg .rdg-cell .numeric-cell {
+  text-align: right;
+  padding-right: 10px;
+}
+
+/* 負の値のスタイル */
+.rdg .rdg-cell .numeric-cell.negative {
+  color: red;
 }
 
 /* 合計行のスタイル */
@@ -53,23 +61,7 @@
   border-top: 2px solid #e0e0e0;
 }
 
-/* react-data-gridのセル全体のスタイル調整（白背景用） */
-.rdg {
-  background-color: #ffffff;
-  color: #213547;
-}
-
-.rdg .rdg-cell {
-  border-color: #e0e0e0;
-  background-color: #ffffff;
-  color: #213547;
-}
-
-.rdg .rdg-row:hover {
-  background-color: #f9f9f9;
-}
-
 /* バランスチェック行のスタイル */
 .rdg .balance-check-row {
-  background-color: #f9f9f9;
+  background-color: #d7e3f3;
 }

@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import type { Column } from "react-data-grid";
 import { SimpleFAM } from "../fam/simpleFam";
 import { forecastRules } from "../data/forecastRules";
@@ -528,5 +528,14 @@ export function useFinancialModel() {
     updateGrid(famInstanceRef.current, updatedPeriods);
   }, [displayPeriods, updateGrid]);
 
-  return { columns, rows, runCompute };
+  // 次の年度のperiodIdを計算（表示用）
+  const nextYearPeriodId = useMemo(() => {
+    if (displayPeriods.length === 0) return null;
+    const latestPeriod = displayPeriods[displayPeriods.length - 1];
+    const nextYear = latestPeriod.year + 1;
+    const nextMonth = latestPeriod.month;
+    return `${nextYear}-${nextMonth}`;
+  }, [displayPeriods]);
+
+  return { columns, rows, runCompute, nextYearPeriodId };
 }
