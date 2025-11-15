@@ -8,3 +8,9 @@ import type { AccountId } from "../model/types";
  */
 export const BASE_PROFIT_CF_ACCOUNT_ID: AccountId =
   "baseProfit_cf" as AccountId;
+
+/**
+ * 税率（法人税率）
+ * FSとDCFの両方で使用される
+ */
+export const TAX_RATE = 0.3; // 30%

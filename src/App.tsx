@@ -3,9 +3,9 @@ import { lazy, Suspense } from "react";
 import "./App.css";
 
 // ページコンポーネントを遅延読み込み
-const FSPage = lazy(() => import("./pages/FSPage"));
-const DCFPage = lazy(() => import("./pages/DCFPage"));
-const ConfigPage = lazy(() => import("./pages/ConfigPage"));
+const FSPage = lazy(() => import("./pages/FSPage.tsx"));
+const DCFPage = lazy(() => import("./pages/DCFPage.tsx"));
+const ConfigPage = lazy(() => import("./pages/ConfigPage.tsx"));
 
 function App() {
   return (

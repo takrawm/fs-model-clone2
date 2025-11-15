@@ -24,6 +24,9 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
             if (row.rowType === "fs-header") {
               return <strong>{row.fsType}</strong>;
             }
+            if (row.rowType === "dcf-header") {
+              return <strong>{row.sheetType}</strong>;
+            }
             // ratio行とyoy行は、rowClassで適用されるCSSに任せる
             return <span className="account-name">{row.accountName}</span>;
           },
@@ -33,7 +36,8 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           ...col,
           renderCell: (props: RenderCellProps<Row>) => {
             const { row } = props;
-            if (row.rowType === "fs-header") return null;
+            if (row.rowType === "fs-header" || row.rowType === "dcf-header")
+              return null;
             return (
               <span className="rule-description">{row.ruleDescription}</span>
             );
@@ -45,7 +49,8 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           ...col,
           renderCell: (props: RenderCellProps<Row>) => {
             const { row } = props;
-            if (row.rowType === "fs-header") return null;
+            if (row.rowType === "fs-header" || row.rowType === "dcf-header")
+              return null;
 
             const value = row[col.key as string];
 
@@ -127,7 +132,8 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
       rowKeyGetter={(row) => row.id}
       style={{ height: "80vh" }}
       rowClass={(row) => {
-        if (row.rowType === "fs-header") return "fs-header-row";
+        if (row.rowType === "fs-header" || row.rowType === "dcf-header")
+          return "fs-header-row";
         if (row.rowType === "balance-check") return "balance-check-row";
         if (row.rowType === "ratio") return "ratio-row";
         if (row.rowType === "yoy") return "yoy-row";

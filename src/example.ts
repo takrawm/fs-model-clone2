@@ -25,10 +25,12 @@ const previousPeriodId = decrementFiscalYear(forecastPeriodId);
 const actualPrevious = periodValues(previousPeriodId);
 
 // 財務諸表ごとに科目を分類
-const plAccounts = allAccounts.filter((account) => account.fs_type === "PL");
-const bsAccounts = allAccounts.filter((account) => account.fs_type === "BS");
-const cfAccounts = allAccounts.filter((account) => account.fs_type === "CF");
-const ppeAccounts = allAccounts.filter((account) => account.fs_type === "PP&E");
+const plAccounts = allAccounts.filter((account) => account.sheetType === "PL");
+const bsAccounts = allAccounts.filter((account) => account.sheetType === "BS");
+const cfAccounts = allAccounts.filter((account) => account.sheetType === "CF");
+const ppeAccounts = allAccounts.filter(
+  (account) => account.sheetType === "PP&E"
+);
 
 // KPI科目（単価・数量）を分離
 const kpiAccounts = plAccounts.filter((account) =>

@@ -16,15 +16,10 @@ import type {
 } from "../model/types.ts";
 import { createPeriod } from "../utils/periodUtils.ts";
 import { roundTo2Decimals, roundToInteger } from "../utils/numberUtils.ts";
-import {
-  getPreviousPeriodDifferenceForAccount,
-  multiplyAccountBySign,
-  multiplyFormulaNodeBySign,
-  sumFormulaNodes,
-} from "./cfRuleBuilders.ts";
 import { ruleHandlers } from "./ruleHandlers.ts";
 import type { RuleHandlerContext } from "./ruleHandlers.ts";
-import { BASE_PROFIT_CF_ACCOUNT_ID } from "../config/financialModelConfig.ts";
+import { generateCashFlowRules } from "./cfRuleGenerator.ts";
+import { generateDcfRules } from "./dcfRuleGenerator.ts";
 
 export class SimpleFAM {
   // ASTノードを管理するレジストリ
@@ -137,10 +132,11 @@ export class SimpleFAM {
     this.valueKeyToNodeId.clear();
     this.visiting.clear();
 
-    // ▼▼▼ ここから追加 ▼▼▼
     // AST計算の前に、CF関連のルールを動的に生成して this.rules に注入する
-    this.generateCashFlowRules();
-    // ▲▲▲ ここまで追加 ▲▲▲
+    generateCashFlowRules(this.accounts, this.rules);
+
+    // AST計算の前に、DCF関連のルールを動的に生成して this.rules に注入する
+    generateDcfRules(this.accounts, this.rules);
 
     console.log("\n予測計算を開始します...");
 
@@ -427,151 +423,6 @@ export class SimpleFAM {
     }
 
     return createPeriod(nextYear, nextMonth, latest.periodType);
-  }
-
-  // src/fam/simpleFam.ts (class SimpleFAM 内に追加)
-
-  /**
-   * 間接法CFの計算ルールを動的に生成し、this.rules に注入する
-   * AST計算の実行前に呼び出す必要がある
-   */
-  private generateCashFlowRules() {
-    console.log("  - CF計算ルールを動的に生成中...");
-
-    const cfRuleItems: FormulaNode[] = [];
-    let baseProfitAccountId: AccountId | null = null;
-
-    // baseProfitのCF科目IDは固定値を使用
-    const baseProfitCfAccountId: AccountId = BASE_PROFIT_CF_ACCOUNT_ID;
-
-    // values()はJavaScriptのMapの組み込みメソッドです。
-    for (const account of this.accounts.values()) {
-      // 1. CF計算の起点となる利益を特定
-      if (account.isCfBaseProfit) {
-        baseProfitAccountId = account.id;
-
-        // baseProfitからCF科目を生成（表示用）
-        if (!this.accounts.has(baseProfitCfAccountId)) {
-          this.accounts.set(baseProfitCfAccountId, {
-            id: baseProfitCfAccountId,
-            accountName: `${account.accountName}（CF）`,
-            fs_type: "CF",
-            ignoredForCf: true,
-          });
-        }
-
-        // baseProfitのCF科目は、元のbaseProfitを参照するだけ
-        this.rules[baseProfitCfAccountId] = {
-          type: "REFERENCE",
-          ref: baseProfitAccountId,
-        };
-
-        // baseProfitCfAccountIdはcfRuleItemsには含めず、
-        // sumFormulaNodesのbaseNodeとして使用する（二重カウントを避ける）
-
-        continue;
-      }
-
-      // 3. BS科目の増減（運転資本など）をCFに反映
-      //    (isCashAccount や ignoredForCf ではないBS科目)
-      const rule = this.rules[account.id];
-      if (
-        account.fs_type === "BS" &&
-        !account.isCashAccount &&
-        !account.ignoredForCf &&
-        rule?.type !== "BALANCE_CHANGE" // BALANCE_CHANGE は 2. で処理
-      ) {
-        const cfAccountId = `${account.id}_cf_wc`;
-        // CF科目マスタになければ追加
-        if (!this.accounts.has(cfAccountId)) {
-          this.accounts.set(cfAccountId, {
-            id: cfAccountId,
-            accountName: `${account.accountName}増減(CF)`,
-            fs_type: "CF",
-            ignoredForCf: true,
-          });
-        }
-
-        // 符号： 資産(isCredit: false)の増加(Diff=+)はCF減(-)
-        //       負債(isCredit: true) の増加(Diff=+)はCF増(+)
-        const sign = account.isCredit ?? false ? 1 : -1;
-        const diffFormulaNode = getPreviousPeriodDifferenceForAccount(
-          account.id
-        );
-
-        this.rules[cfAccountId] = {
-          type: "CALCULATION",
-          formulaNode: multiplyFormulaNodeBySign(diffFormulaNode, sign),
-        };
-        cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
-      }
-
-      // 2. non-cash項目 (depreciationなど) や 投資CF (capexなど) をCFに反映
-      //    (BALANCE_CHANGE の flow のうち、PL科目またはPP&E科目を調整)
-      if (rule?.type === "BALANCE_CHANGE") {
-        for (const flow of rule.flowAccounts) {
-          const flowAccount = this.accounts.get(flow.ref);
-          if (!flowAccount) continue;
-
-          // PL科目またはPP&E科目からのフローをCF調整項目とする
-          if (flowAccount.fs_type === "PL" || flowAccount.fs_type === "PP&E") {
-            // CFの起点（net_income）自体は除外
-            if (flowAccount.isCfBaseProfit) continue;
-
-            const cfAccountId = `${flow.ref}_cf_adj`;
-            if (!this.accounts.has(cfAccountId)) {
-              this.accounts.set(cfAccountId, {
-                id: cfAccountId,
-                accountName: `${flowAccount.accountName}調整(CF)`,
-                fs_type: "CF",
-                ignoredForCf: true,
-              });
-            }
-
-            // 符号： 資産(isCredit: false)へのPLUS(例:capex)はCF減(-)
-            //       資産(isCredit: false)へのMINUS(例:dep)はCF増(+)
-            //       負債(isCredit: true) へのPLUS(例:net_income)はCF増(+)
-            const sign = account.isCredit ?? false ? 1 : -1;
-            const flowSign = flow.sign === "PLUS" ? 1 : -1;
-            const cfSign = sign * flowSign;
-
-            this.rules[cfAccountId] = {
-              type: "CALCULATION",
-              formulaNode: multiplyAccountBySign(flow.ref, cfSign),
-            };
-            cfRuleItems.push({ type: "ACCOUNT", id: cfAccountId });
-          }
-        }
-      }
-    }
-
-    // 4. CF集計科目 (cash_change_cf) のルールを生成
-    if (!baseProfitAccountId) {
-      throw new Error(
-        "CFの起点となる利益科目 (isCfBaseProfit: true) が見つかりません。"
-      );
-    }
-
-    // `net_income_cf + (cf_item1 + cf_item2 + ...)` の式を構築
-    // baseProfitCfAccountIdを起点として使用（二重カウントを避ける）
-    // cfRuleItemsにはbaseProfitCfAccountIdは含まれていない
-    const cfSummaryFormulaNode = sumFormulaNodes(
-      cfRuleItems,
-      { type: "ACCOUNT", id: baseProfitCfAccountId } // 起点
-    );
-
-    this.rules["cash_change_cf"] = {
-      type: "CALCULATION",
-      formulaNode: cfSummaryFormulaNode,
-    };
-
-    // 5. cashのルールをcash_change_cfを含むように更新
-    this.rules["cash"] = {
-      type: "BALANCE_CHANGE",
-      flowAccounts: [{ ref: "cash_change_cf", sign: "PLUS" }],
-    };
-
-    console.log("  - CF計算ルール生成完了。");
   }
 
   /**

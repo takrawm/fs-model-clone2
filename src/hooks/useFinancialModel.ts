@@ -24,6 +24,8 @@ import type {
   Period,
   PeriodId,
   FsType,
+  DcfType,
+  SheetType,
 } from "../model/types";
 
 // react-data-grid の Row 型を定義
@@ -34,7 +36,8 @@ export interface AccountRow {
   accountName: string;
   ruleDescription: string;
   rowType: "account";
-  fsType: FsType;
+  fsType?: FsType;
+  sheetType?: SheetType;
   // 期間列の値: PeriodId（stringのエイリアス）をキーとして持つ
   // 実際のキーは string 型だが、PeriodId の値が入ることが想定される
   [period: string]: string | number | undefined;
@@ -77,7 +80,17 @@ export interface YearOverYearRow {
   ruleDescription: string;
   rowType: "yoy";
   fsType?: FsType;
+  sheetType?: SheetType;
   [period: string]: string | number | undefined;
+}
+
+// DCFヘッダー行（期間の値を持たない）
+export interface DcfHeaderRow {
+  id: string;
+  accountName: string;
+  ruleDescription: string;
+  rowType: "dcf-header";
+  sheetType: DcfType;
 }
 
 export type Row =
@@ -85,7 +98,8 @@ export type Row =
   | FsHeaderRow
   | BalanceCheckRow
   | RatioRow
-  | YearOverYearRow;
+  | YearOverYearRow
+  | DcfHeaderRow;
 
 /**
  * フックが提供する値の型
@@ -168,7 +182,7 @@ export function useFinancialModelStore(): FinancialModelHook {
     // 事前にアカウントを分類
     for (const fsType of fsTypeOrder) {
       const accountsOfThisFsType = allAccounts.filter(
-        (acc) => acc.fs_type === fsType
+        (acc) => acc.sheetType === fsType
       );
 
       if (accountsOfThisFsType.length === 0) {
@@ -258,14 +272,16 @@ export function useFinancialModelStore(): FinancialModelHook {
 
         const accountId = accountsForFsType.baseProfit.id; // BASE_PROFIT_CF_ACCOUNT_ID
 
-        renderRows.push({
+        const baseProfitRow: AccountRow = {
           id: accountId,
           accountName: accountsForFsType.baseProfit.accountName, // 既に「（CF）」が含まれている
           ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: "CF",
+          sheetType: accountsForFsType.baseProfit.sheetType ?? undefined,
           ...periodValues,
-        });
+        };
+        renderRows.push(baseProfitRow);
 
         // YearOverYearを追加（該当する場合）
         // analysisConfig.tsのyearOverYearConfigにaccountIdが含まれている場合のみ表示
@@ -327,14 +343,16 @@ export function useFinancialModelStore(): FinancialModelHook {
         }
 
         const accountId = account.id;
-        renderRows.push({
+        const accountRow: AccountRow = {
           id: accountId,
           accountName: account.accountName,
           ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: fsType,
+          sheetType: account.sheetType ?? undefined,
           ...periodValues,
-        });
+        };
+        renderRows.push(accountRow);
 
         // YearOverYearを追加（該当する場合）
         const yoy = yoyByAccountId.get(accountId);
@@ -419,14 +437,16 @@ export function useFinancialModelStore(): FinancialModelHook {
         }
 
         const accountId = accountsForFsType.cashChangeCf.id;
-        renderRows.push({
+        const cashChangeRow: AccountRow = {
           id: accountId,
           accountName: accountsForFsType.cashChangeCf.accountName,
           ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: "CF",
+          sheetType: accountsForFsType.cashChangeCf.sheetType ?? undefined,
           ...periodValues,
-        });
+        };
+        renderRows.push(cashChangeRow);
 
         // YearOverYearを追加（該当する場合）
         const yoy = yoyByAccountId.get(accountId);
@@ -474,6 +494,57 @@ export function useFinancialModelStore(): FinancialModelHook {
             }
           }
         }
+      }
+    }
+
+    // DCFタイプのアカウントを処理
+    const dcfTypeOrder: DcfType[] = ["FCF", "PV"];
+    for (const dcfType of dcfTypeOrder) {
+      const dcfAccounts = allAccounts.filter(
+        (acc) => acc.sheetType === dcfType
+      );
+
+      if (dcfAccounts.length === 0) {
+        continue;
+      }
+
+      // DCFヘッダーを表示
+      renderRows.push({
+        id: `dcf-header-${dcfType}`,
+        accountName: dcfType,
+        ruleDescription: "",
+        rowType: "dcf-header",
+        sheetType: dcfType,
+      });
+
+      // DCFアカウントを表示
+      for (const account of dcfAccounts) {
+        const periodValues: Record<PeriodId, number> = {};
+        for (const period of periods) {
+          const value = getValueFromFam(fam, period.id, account.id);
+          periodValues[period.id] = value;
+        }
+
+        const accountId = account.id;
+        const accountRow: AccountRow = {
+          id: accountId,
+          accountName: account.accountName,
+          ruleDescription: getRuleDescription(accountId, accountsMap),
+          rowType: "account",
+          sheetType: account.sheetType ?? undefined,
+          ...periodValues,
+        };
+        // FsTypeの場合はfsTypeも設定
+        if (
+          account.sheetType === "PL" ||
+          account.sheetType === "BS" ||
+          account.sheetType === "CF" ||
+          account.sheetType === "PP&E" ||
+          account.sheetType === "OTHER"
+        ) {
+          accountRow.fsType = account.sheetType;
+        }
+        renderRows.push(accountRow);
       }
     }
 

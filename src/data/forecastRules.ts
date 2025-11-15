@@ -1,4 +1,5 @@
 import type { AccountId, Rule } from "../model/types.ts";
+import { TAX_RATE } from "../config/financialModelConfig.ts";
 
 export const forecastRules: Record<AccountId, Rule> = {
   unit_price: {
@@ -65,7 +66,7 @@ export const forecastRules: Record<AccountId, Rule> = {
       type: "BINARY_OP",
       op: "MUL",
       left: { type: "ACCOUNT", id: "operating_profit" satisfies AccountId },
-      right: { type: "NUMBER", value: 0.3 },
+      right: { type: "NUMBER", value: TAX_RATE },
     },
   },
   net_income: {

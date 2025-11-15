@@ -6,6 +6,10 @@ export type Op = "ADD" | "SUB" | "MUL" | "DIV";
 
 export type FsType = "PL" | "BS" | "CF" | "PP&E" | "OTHER";
 
+export type DcfType = "FCF" | "PV";
+
+export type SheetType = FsType | DcfType;
+
 export type Node = FFNode | TTNode;
 
 /**
@@ -76,7 +80,7 @@ export interface Account {
   id: AccountId;
   accountName: string;
   globalAccountId?: string | null;
-  fs_type?: FsType | null;
+  sheetType?: SheetType | null;
   parent_id?: AccountId | null;
   isCredit?: boolean | null;
   ignoredForCf?: boolean | null; // CF計算のときに除外する項目（現預金、「流動資産合計」などの合計科目）

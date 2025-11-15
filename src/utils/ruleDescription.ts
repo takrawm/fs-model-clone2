@@ -110,9 +110,9 @@ export function getRuleDescription(
       const flowSign = flow?.sign === "PLUS" ? 1 : -1;
       const cfSign = sign * flowSign;
       const signStr = cfSign === 1 ? "" : " * -1";
-      return `${sourceName}(${sourceAccount?.fs_type})${signStr}`;
+      return `${sourceName}(${sourceAccount?.sheetType})${signStr}`;
     }
-    return `${sourceName}(${sourceAccount?.fs_type})`;
+    return `${sourceName}(${sourceAccount?.sheetType})`;
   }
 
   if (accountId === "cash_change_cf") {

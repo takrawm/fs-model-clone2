@@ -6,9 +6,14 @@ import { StatementTable } from "../components/StatementTable";
 function DCFPage() {
   const { columns, rows, nextYearPeriodId } = useFinancialModel();
 
-  // FSヘッダー行（PL, BSなど）を除外した行を作成
+  // DCFタイプの行のみを表示（DCFヘッダー行とDCFアカウント行）
   const dcfRows = useMemo(() => {
-    return rows.filter((row) => row.rowType !== "fs-header");
+    return rows.filter(
+      (row) =>
+        row.rowType === "dcf-header" ||
+        (row.rowType === "account" &&
+          (row.sheetType === "FCF" || row.sheetType === "PV"))
+    );
   }, [rows]);
 
   return (
@@ -28,4 +33,3 @@ function DCFPage() {
 }
 
 export default DCFPage;
-
