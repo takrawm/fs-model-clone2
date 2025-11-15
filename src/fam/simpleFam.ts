@@ -24,6 +24,7 @@ import {
 } from "./cfRuleBuilders.ts";
 import { ruleHandlers } from "./ruleHandlers.ts";
 import type { RuleHandlerContext } from "./ruleHandlers.ts";
+import { BASE_PROFIT_CF_ACCOUNT_ID } from "../config/financialModelConfig.ts";
 
 export class SimpleFAM {
   // ASTノードを管理するレジストリ
@@ -439,11 +440,35 @@ export class SimpleFAM {
 
     const cfRuleItems: FormulaNode[] = [];
     let baseProfitAccountId: AccountId | null = null;
+
+    // baseProfitのCF科目IDは固定値を使用
+    const baseProfitCfAccountId: AccountId = BASE_PROFIT_CF_ACCOUNT_ID;
+
     // values()はJavaScriptのMapの組み込みメソッドです。
     for (const account of this.accounts.values()) {
       // 1. CF計算の起点となる利益を特定
       if (account.isCfBaseProfit) {
         baseProfitAccountId = account.id;
+
+        // baseProfitからCF科目を生成（表示用）
+        if (!this.accounts.has(baseProfitCfAccountId)) {
+          this.accounts.set(baseProfitCfAccountId, {
+            id: baseProfitCfAccountId,
+            accountName: `${account.accountName}（CF）`,
+            fs_type: "CF",
+            ignoredForCf: true,
+          });
+        }
+
+        // baseProfitのCF科目は、元のbaseProfitを参照するだけ
+        this.rules[baseProfitCfAccountId] = {
+          type: "REFERENCE",
+          ref: baseProfitAccountId,
+        };
+
+        // baseProfitCfAccountIdはcfRuleItemsには含めず、
+        // sumFormulaNodesのbaseNodeとして使用する（二重カウントを避ける）
+
         continue;
       }
 
@@ -527,10 +552,12 @@ export class SimpleFAM {
       );
     }
 
-    // `net_income + (cf_item1 + cf_item2 + ...)` の式を構築
+    // `net_income_cf + (cf_item1 + cf_item2 + ...)` の式を構築
+    // baseProfitCfAccountIdを起点として使用（二重カウントを避ける）
+    // cfRuleItemsにはbaseProfitCfAccountIdは含まれていない
     const cfSummaryFormulaNode = sumFormulaNodes(
       cfRuleItems,
-      { type: "ACCOUNT", id: baseProfitAccountId } // 起点
+      { type: "ACCOUNT", id: baseProfitCfAccountId } // 起点
     );
 
     this.rules["cash_change_cf"] = {

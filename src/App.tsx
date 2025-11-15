@@ -7,7 +7,7 @@ function App() {
 
   return (
     <div className="app-container">
-      <h1>Simple Financial Model (Canvas)</h1>
+      <h2>Simple Financial Model</h2>
       <button onClick={runCompute}>Compute Next Year (2026-3)</button>
 
       <div className="grid-container">

@@ -24,6 +24,21 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
             if (row.rowType === "fs-header") {
               return <strong>{row.fsType}</strong>;
             }
+            if (row.rowType === "balance-check") {
+              return (
+                <span
+                  style={{
+                    backgroundColor: "#0066cc",
+                    color: "white",
+                    padding: "2px 8px 2px 20px",
+                    borderRadius: "3px",
+                    display: "inline-block",
+                  }}
+                >
+                  {row.accountName}
+                </span>
+              );
+            }
             if (row.rowType === "ratio" || row.rowType === "yoy") {
               return (
                 <span
@@ -126,11 +141,29 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
               if (typeof value === "number") {
                 // 整数に丸めてから、3桁ごとにカンマを付けて表示
                 const integerValue = Math.round(value);
+                const absValue = Math.abs(integerValue);
+                const formattedValue = absValue.toLocaleString("ja-JP", {
+                  maximumFractionDigits: 0,
+                });
+
+                // マイナスの場合は()付きで赤字表示
+                if (integerValue < 0) {
+                  return (
+                    <div
+                      style={{
+                        textAlign: "right",
+                        paddingRight: "10px",
+                        color: "red",
+                      }}
+                    >
+                      ({formattedValue})
+                    </div>
+                  );
+                }
+
                 return (
                   <div style={{ textAlign: "right", paddingRight: "10px" }}>
-                    {integerValue.toLocaleString("ja-JP", {
-                      maximumFractionDigits: 0,
-                    })}
+                    {formattedValue}
                   </div>
                 );
               }

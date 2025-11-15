@@ -9,6 +9,7 @@ import { getRuleDescription } from "../utils/ruleDescription";
 import { FinancialAnalysis } from "../utils/financialAnalysis";
 import type { Ratio, YearOverYear } from "../utils/financialAnalysis";
 import { ratioConfig, yearOverYearConfig } from "../config/analysisConfig";
+import { BASE_PROFIT_CF_ACCOUNT_ID } from "../config/financialModelConfig";
 import type {
   Account,
   AccountId,
@@ -152,7 +153,8 @@ export function useFinancialModel() {
       for (const account of accountsOfThisFsType) {
         if (account.id === "cash_change_cf") {
           cashChangeCf = account;
-        } else if (account.isCfBaseProfit) {
+        } else if (account.id === BASE_PROFIT_CF_ACCOUNT_ID) {
+          // baseProfitのCF科目を検出（固定値で判定）
           baseProfit = account;
           // baseProfitはCFセクションの最初に表示するため、regularには含めない
         } else {
@@ -214,7 +216,7 @@ export function useFinancialModel() {
 
       // CFセクションの場合、まず当期純利益（CF）を表示
       if (fsType === "CF" && accountsForFsType.baseProfit) {
-        //baseProfitにおける各期間の値を取得
+        // baseProfitのCF科目における各期間の値を取得
         const periodValues: Record<PeriodId, number> = {};
         for (const period of periods) {
           const value = getValueFromFam(
@@ -225,10 +227,11 @@ export function useFinancialModel() {
           periodValues[period.id] = value;
         }
 
-        const accountId = accountsForFsType.baseProfit.id;
+        const accountId = accountsForFsType.baseProfit.id; // BASE_PROFIT_CF_ACCOUNT_ID
+
         renderRows.push({
-          id: `${accountId}-cf`,
-          accountName: `${accountsForFsType.baseProfit.accountName}（CF）`,
+          id: accountId,
+          accountName: accountsForFsType.baseProfit.accountName, // 既に「（CF）」が含まれている
           ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: "CF",
@@ -236,6 +239,7 @@ export function useFinancialModel() {
         });
 
         // YearOverYearを追加（該当する場合）
+        // analysisConfig.tsのyearOverYearConfigにaccountIdが含まれている場合のみ表示
         const yoy = yoyByAccountId.get(accountId);
         if (yoy) {
           const yoyValues: Record<PeriodId, number> = {};
@@ -258,6 +262,7 @@ export function useFinancialModel() {
         }
 
         // Ratioを追加（該当する場合）
+        // analysisConfig.tsのratioConfigにaccountIdがtargetAccountIdとして含まれている場合のみ表示
         const ratios = ratiosByTargetAccount.get(accountId);
         if (ratios) {
           for (const ratio of ratios) {
