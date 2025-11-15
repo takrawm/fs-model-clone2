@@ -69,6 +69,13 @@ export class SimpleFAM {
   }
 
   /**
+   * 全ての期間を取得します
+   */
+  getAllPeriods(): Period[] {
+    return this.periods.slice();
+  }
+
+  /**
    * 期間情報を設定します
    */
   setPeriods(periods: Period[]) {

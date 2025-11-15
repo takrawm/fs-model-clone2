@@ -19,9 +19,23 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
 
       // カラムキーに応じてフォーマッターを追加
       if (col.key === "accountName") {
+        // accountName列のフォーマッター（比率と前期比のスタイルを追加）
         (newCol as any).formatter = ({ row }: { row: Row }) => {
           if (row.rowType === "fs-header") {
             return <strong>{row.fsType}</strong>;
+          }
+          if (row.rowType === "ratio" || row.rowType === "yoy") {
+            return (
+              <span
+                style={{
+                  paddingLeft: "20px",
+                  color: "#888",
+                  fontStyle: "italic",
+                }}
+              >
+                {row.accountName}
+              </span>
+            );
           }
           return <span style={{ paddingLeft: "20px" }}>{row.accountName}</span>;
         };
@@ -44,7 +58,7 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           // バランスチェック行
           if (row.rowType === "balance-check") {
             if (typeof value === "number") {
-              const isBalanced = Math.abs(value) < 0.01;
+              const isBalanced = value === 0; // 完全一致をチェック
               return (
                 <div
                   style={{
@@ -64,7 +78,14 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           if (row.rowType === "ratio") {
             if (typeof value === "number") {
               return (
-                <div style={{ textAlign: "right", paddingRight: "10px" }}>
+                <div
+                  style={{
+                    textAlign: "right",
+                    paddingRight: "10px",
+                    color: "#888",
+                    fontStyle: "italic",
+                  }}
+                >
                   {value.toFixed(1)}%
                 </div>
               );
@@ -75,13 +96,13 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           // 前期比行
           if (row.rowType === "yoy") {
             if (typeof value === "number") {
-              const color = value > 0 ? "green" : value < 0 ? "red" : "inherit";
               return (
                 <div
                   style={{
                     textAlign: "right",
                     paddingRight: "10px",
-                    color: color,
+                    color: "#888",
+                    fontStyle: "italic",
                   }}
                 >
                   {value > 0 ? "+" : ""}

@@ -7,6 +7,7 @@ import { seedPeriods } from "../data/seedPeriodData";
 import { seedActualValues } from "../data/seedValueData";
 import { getRuleDescription } from "../utils/ruleDescription";
 import { FinancialAnalysis } from "../utils/financialAnalysis";
+import type { Ratio, YearOverYear } from "../utils/financialAnalysis";
 import { ratioConfig, yearOverYearConfig } from "../config/analysisConfig";
 import type {
   Account,
@@ -172,6 +173,30 @@ export function useFinancialModel() {
     // 財務分析インスタンスを作成（バランスチェックで使用）
     const analysis = new FinancialAnalysis(fam);
 
+    // 全期間のIDを取得
+    const periodIds = periods.map((p) => p.id);
+
+    // 比率と前期比を事前に計算
+    const allRatios = analysis.calculateRatios(periodIds, ratioConfig);
+    const allYearOverYear = analysis.calculateYearOverYear(
+      periodIds,
+      yearOverYearConfig
+    );
+
+    // 比率をtargetAccountIdでグループ化
+    const ratiosByTargetAccount = new Map<AccountId, Ratio[]>();
+    for (const ratio of allRatios) {
+      const existing = ratiosByTargetAccount.get(ratio.targetAccountId) || [];
+      existing.push(ratio);
+      ratiosByTargetAccount.set(ratio.targetAccountId, existing);
+    }
+
+    // 前期比をaccountIdでマッピング
+    const yoyByAccountId = new Map<AccountId, YearOverYear>();
+    for (const yoy of allYearOverYear) {
+      yoyByAccountId.set(yoy.accountId, yoy);
+    }
+
     for (const fsType of fsTypeOrder) {
       const accountsForFsType = accountMapByFsType.get(fsType);
       if (!accountsForFsType) {
@@ -200,17 +225,62 @@ export function useFinancialModel() {
           periodValues[period.id] = value;
         }
 
+        const accountId = accountsForFsType.baseProfit.id;
         renderRows.push({
-          id: `${accountsForFsType.baseProfit.id}-cf`,
+          id: `${accountId}-cf`,
           accountName: `${accountsForFsType.baseProfit.accountName}（CF）`,
-          ruleDescription: getRuleDescription(
-            accountsForFsType.baseProfit.id,
-            accountsMap
-          ),
+          ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: "CF",
           ...periodValues,
         });
+
+        // YearOverYearを追加（該当する場合）
+        const yoy = yoyByAccountId.get(accountId);
+        if (yoy) {
+          const yoyValues: Record<PeriodId, number> = {};
+          for (const period of periods) {
+            const changeRate = yoy.changeRates.get(period.id);
+            if (changeRate !== undefined) {
+              yoyValues[period.id] = changeRate;
+            }
+          }
+          if (Object.keys(yoyValues).length > 0) {
+            renderRows.push({
+              id: `yoy-${accountId}`,
+              accountName: "前期比",
+              ruleDescription: "",
+              rowType: "yoy",
+              fsType: fsType,
+              ...yoyValues,
+            });
+          }
+        }
+
+        // Ratioを追加（該当する場合）
+        const ratios = ratiosByTargetAccount.get(accountId);
+        if (ratios) {
+          for (const ratio of ratios) {
+            const ratioValues: Record<PeriodId, number> = {};
+            for (const period of periods) {
+              const value = ratio.values.get(period.id);
+              if (value !== undefined) {
+                ratioValues[period.id] = value;
+              }
+            }
+            if (Object.keys(ratioValues).length > 0) {
+              renderRows.push({
+                id: `ratio-${ratio.baseAccountId}-${ratio.targetAccountId}`,
+                accountName: ratio.label,
+                ruleDescription: "",
+                rowType: "ratio",
+                ratioType: ratio.ratioType,
+                fsType: fsType,
+                ...ratioValues,
+              });
+            }
+          }
+        }
       }
 
       // 通常のアカウントを表示
@@ -222,17 +292,65 @@ export function useFinancialModel() {
           periodValues[period.id] = value;
         }
 
+        const accountId = account.id;
         renderRows.push({
-          id: account.id,
+          id: accountId,
           accountName: account.accountName,
-          ruleDescription: getRuleDescription(account.id, accountsMap),
+          ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: fsType,
           ...periodValues,
         });
 
+        // YearOverYearを追加（該当する場合）
+        const yoy = yoyByAccountId.get(accountId);
+        if (yoy) {
+          const yoyValues: Record<PeriodId, number> = {};
+          for (const period of periods) {
+            const changeRate = yoy.changeRates.get(period.id);
+            if (changeRate !== undefined) {
+              yoyValues[period.id] = changeRate;
+            }
+          }
+          if (Object.keys(yoyValues).length > 0) {
+            renderRows.push({
+              id: `yoy-${accountId}`,
+              accountName: "前期比",
+              ruleDescription: "",
+              rowType: "yoy",
+              fsType: fsType,
+              ...yoyValues,
+            });
+          }
+        }
+
+        // Ratioを追加（該当する場合）
+        const ratios = ratiosByTargetAccount.get(accountId);
+        if (ratios) {
+          for (const ratio of ratios) {
+            const ratioValues: Record<PeriodId, number> = {};
+            for (const period of periods) {
+              const value = ratio.values.get(period.id);
+              if (value !== undefined) {
+                ratioValues[period.id] = value;
+              }
+            }
+            if (Object.keys(ratioValues).length > 0) {
+              renderRows.push({
+                id: `ratio-${ratio.baseAccountId}-${ratio.targetAccountId}`,
+                accountName: ratio.label,
+                ruleDescription: "",
+                rowType: "ratio",
+                ratioType: ratio.ratioType,
+                fsType: fsType,
+                ...ratioValues,
+              });
+            }
+          }
+        }
+
         // BSセクションで、equity_and_liabilities_totalの直後にバランスチェック行を追加
-        if (fsType === "BS" && account.id === "equity_and_liabilities_total") {
+        if (fsType === "BS" && accountId === "equity_and_liabilities_total") {
           const balanceCheckValues: Record<PeriodId, number> = {};
           for (const period of periods) {
             const balanceCheck = analysis.checkBalance(period.id);
@@ -266,17 +384,62 @@ export function useFinancialModel() {
           periodValues[period.id] = value;
         }
 
+        const accountId = accountsForFsType.cashChangeCf.id;
         renderRows.push({
-          id: accountsForFsType.cashChangeCf.id,
+          id: accountId,
           accountName: accountsForFsType.cashChangeCf.accountName,
-          ruleDescription: getRuleDescription(
-            accountsForFsType.cashChangeCf.id,
-            accountsMap
-          ),
+          ruleDescription: getRuleDescription(accountId, accountsMap),
           rowType: "account",
           fsType: "CF",
           ...periodValues,
         });
+
+        // YearOverYearを追加（該当する場合）
+        const yoy = yoyByAccountId.get(accountId);
+        if (yoy) {
+          const yoyValues: Record<PeriodId, number> = {};
+          for (const period of periods) {
+            const changeRate = yoy.changeRates.get(period.id);
+            if (changeRate !== undefined) {
+              yoyValues[period.id] = changeRate;
+            }
+          }
+          if (Object.keys(yoyValues).length > 0) {
+            renderRows.push({
+              id: `yoy-${accountId}`,
+              accountName: "前期比",
+              ruleDescription: "",
+              rowType: "yoy",
+              fsType: fsType,
+              ...yoyValues,
+            });
+          }
+        }
+
+        // Ratioを追加（該当する場合）
+        const ratios = ratiosByTargetAccount.get(accountId);
+        if (ratios) {
+          for (const ratio of ratios) {
+            const ratioValues: Record<PeriodId, number> = {};
+            for (const period of periods) {
+              const value = ratio.values.get(period.id);
+              if (value !== undefined) {
+                ratioValues[period.id] = value;
+              }
+            }
+            if (Object.keys(ratioValues).length > 0) {
+              renderRows.push({
+                id: `ratio-${ratio.baseAccountId}-${ratio.targetAccountId}`,
+                accountName: ratio.label,
+                ruleDescription: "",
+                rowType: "ratio",
+                ratioType: ratio.ratioType,
+                fsType: fsType,
+                ...ratioValues,
+              });
+            }
+          }
+        }
       }
     }
 
@@ -316,47 +479,6 @@ export function useFinancialModel() {
           return "";
         },
       });
-    }
-
-    // 各期間に対して比率計算を実行（analysisは既に作成済み）
-    for (const period of periods) {
-      // 比率計算（ユーザー指定の組み合わせのみ）
-      const ratios = analysis.calculateRatios(period.id, ratioConfig);
-      for (const ratio of ratios) {
-        renderRows.push({
-          id: `ratio-${ratio.baseAccountId}-${ratio.targetAccountId}`,
-          accountName: ratio.label,
-          ruleDescription: "",
-          rowType: "ratio",
-          ratioType: ratio.ratioType,
-          [period.id]: ratio.value,
-        });
-      }
-
-      // 前期比計算（2期間目以降、ユーザー指定の科目のみ）
-      if (periods.length > 1) {
-        const previousPeriodIndex = periods.indexOf(period) - 1;
-        if (previousPeriodIndex >= 0) {
-          const previousPeriod = periods[previousPeriodIndex];
-          const yoyResults = analysis.calculateYearOverYear(
-            period.id,
-            previousPeriod.id,
-            yearOverYearConfig
-          );
-
-          for (const yoy of yoyResults) {
-            renderRows.push({
-              id: `yoy-${yoy.accountId}-${period.id}`,
-              accountName: `${yoy.accountId} 前期比`,
-              ruleDescription: `${yoy.changeRate.toFixed(1)}% (${
-                yoy.changeAmount > 0 ? "+" : ""
-              }${yoy.changeAmount.toLocaleString()})`,
-              rowType: "yoy",
-              [period.id]: yoy.changeRate,
-            });
-          }
-        }
-      }
     }
 
     setColumns(newColumns);
