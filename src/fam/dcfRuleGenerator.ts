@@ -1,8 +1,20 @@
 // src/fam/dcfRuleGenerator.ts
 
-import type { Account, AccountId, FormulaNode, Rule } from "../model/types.ts";
+import type {
+  Account,
+  AccountId,
+  FormulaNode,
+  Period,
+  Rule,
+} from "../model/types.ts";
 import { TAX_RATE } from "../config/financialModelConfig.ts";
-import { sumFormulaNodes } from "./cfRuleBuilders.ts";
+import { dcfConfig } from "../config/dcfConfig.ts";
+import {
+  buildFcfFormulaNode,
+  buildNoplatFormulaNode,
+  buildTaxOnOperatingProfitFormulaNode,
+  calculatePresentValueFactor,
+} from "./dcfRuleBuilder.ts";
 
 /**
  * DCF（FCF）の計算ルールを動的に生成し、rules に注入する
@@ -24,7 +36,41 @@ export function generateDcfRules(
     throw new Error("営業利益科目が見つかりません: operating_profit");
   }
 
-  // 2. NOPLATを計算（営業利益 × (1 - 税率)）
+  // 2. 営業利益（DCF）科目を生成（PLの営業利益を参照）
+  const operatingProfitDcfAccountId: AccountId = "operating_profit_dcf";
+  if (!accounts.has(operatingProfitDcfAccountId)) {
+    accounts.set(operatingProfitDcfAccountId, {
+      id: operatingProfitDcfAccountId,
+      accountName: `${operatingProfitAccount.accountName}（DCF）`,
+      sheetType: "FCF",
+    });
+  }
+
+  rules[operatingProfitDcfAccountId] = {
+    type: "REFERENCE",
+    ref: operatingProfitAccountId,
+  };
+
+  // 3. 税金（対営業利益）科目を生成
+  const taxOnOperatingProfitAccountId: AccountId =
+    "tax_on_operating_profit_dcf";
+  if (!accounts.has(taxOnOperatingProfitAccountId)) {
+    accounts.set(taxOnOperatingProfitAccountId, {
+      id: taxOnOperatingProfitAccountId,
+      accountName: "税金（対営業利益）",
+      sheetType: "FCF",
+    });
+  }
+
+  rules[taxOnOperatingProfitAccountId] = {
+    type: "CALCULATION",
+    formulaNode: buildTaxOnOperatingProfitFormulaNode(
+      operatingProfitDcfAccountId,
+      TAX_RATE
+    ),
+  };
+
+  // 4. NOPLATを計算（営業利益（DCF）- 税金（対営業利益））
   const noplatAccountId: AccountId = "noplat_dcf";
   if (!accounts.has(noplatAccountId)) {
     accounts.set(noplatAccountId, {
@@ -36,15 +82,13 @@ export function generateDcfRules(
 
   rules[noplatAccountId] = {
     type: "CALCULATION",
-    formulaNode: {
-      type: "BINARY_OP",
-      op: "MUL",
-      left: { type: "ACCOUNT", id: operatingProfitAccountId },
-      right: { type: "NUMBER", value: 1 - TAX_RATE },
-    },
+    formulaNode: buildNoplatFormulaNode(
+      operatingProfitDcfAccountId,
+      taxOnOperatingProfitAccountId
+    ),
   };
 
-  // 3. CF科目を参照してDCF調整科目を生成
+  // 5. CF科目を参照してDCF調整科目を生成
   // generateNonCashAddBacks、generateCapexOutflows、generateWorkingCapitalChangesで
   // 生成されたCF科目のIDを取得し、それらを参照するDCF科目を作成
 
@@ -158,10 +202,7 @@ export function generateDcfRules(
     });
   }
 
-  const fcfFormulaNode = sumFormulaNodes(
-    dcfRuleItems,
-    { type: "ACCOUNT", id: noplatAccountId } // 起点
-  );
+  const fcfFormulaNode = buildFcfFormulaNode(noplatAccountId, dcfRuleItems);
 
   rules[fcfAccountId] = {
     type: "CALCULATION",
@@ -169,4 +210,56 @@ export function generateDcfRules(
   };
 
   console.log("  - DCF計算ルール生成完了。");
+}
+
+/**
+ * PV（現在価値）シートの計算ルールを動的に生成し、rules に注入する
+ * AST計算の実行前に呼び出す必要がある
+ *
+ * @param accounts - アカウントマスタ（変更される）
+ * @param rules - 計算ルール（変更される）
+ * @param periods - 期間の配列
+ */
+export function generatePvRules(
+  accounts: Map<AccountId, Account>,
+  rules: Record<AccountId, Rule>,
+  periods: Period[]
+): void {
+  console.log("  - PV計算ルールを動的に生成中...");
+
+  const { baseYear, wacc } = dcfConfig;
+
+  // 各periodに対して現在価値係数の科目を生成
+  for (const period of periods) {
+    // 基準年度からの年数を計算（fiscalYearを使用）
+    const yearsFromBase = period.fiscalYear - baseYear;
+
+    // 基準年度以前のperiodはスキップ
+    if (yearsFromBase <= 0) {
+      continue;
+    }
+
+    // 現在価値係数のAccountIdを生成（例: "pv_factor_2026"）
+    const pvFactorAccountId = `pv_factor_${period.fiscalYear}` as AccountId;
+
+    // 現在価値係数の値を計算
+    const pvFactorValue = calculatePresentValueFactor(yearsFromBase, wacc);
+
+    // Accountを作成
+    if (!accounts.has(pvFactorAccountId)) {
+      accounts.set(pvFactorAccountId, {
+        id: pvFactorAccountId,
+        accountName: "現在価値係数",
+        sheetType: "PV",
+      });
+    }
+
+    // Ruleを作成（INPUTタイプで固定値として設定）
+    rules[pvFactorAccountId] = {
+      type: "INPUT",
+      value: pvFactorValue,
+    };
+  }
+
+  console.log("  - PV計算ルール生成完了。");
 }
