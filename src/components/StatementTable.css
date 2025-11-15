@@ -2,11 +2,13 @@
 .rdg .fs-header-row {
   background-color: #2a2a2a;
   font-weight: bold;
+  color: white;
 }
 
 .rdg .fs-header-cell {
   background-color: #2a2a2a;
   font-weight: bold;
+  color: white;
 }
 
 /* CF派生科目のスタイル */
