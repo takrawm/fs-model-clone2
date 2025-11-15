@@ -95,9 +95,13 @@ export function StatementTable({ columns, rows }: StatementTableProps) {
           // AccountRowの場合
           if (row.rowType === "account") {
             if (typeof value === "number") {
+              // 整数に丸めてから、3桁ごとにカンマを付けて表示
+              const integerValue = Math.round(value);
               return (
                 <div style={{ textAlign: "right", paddingRight: "10px" }}>
-                  {value.toLocaleString()}
+                  {integerValue.toLocaleString("ja-JP", {
+                    maximumFractionDigits: 0,
+                  })}
                 </div>
               );
             }

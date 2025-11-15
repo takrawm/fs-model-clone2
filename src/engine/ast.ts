@@ -2,6 +2,7 @@
 
 import { NodeRegistry } from "../model/registry.ts";
 import type { NodeId, Op } from "../model/types.ts";
+import { roundTo2Decimals } from "../utils/numberUtils.ts";
 
 export function makeFF(
   reg: NodeRegistry,
@@ -271,7 +272,8 @@ export function evalTopo(
           throw new Error(`未対応の演算子: ${node.operator}`);
       }
 
-      values.set(id, result);
+      // 各演算結果を小数点第2位に丸める（丸め誤差を防ぐため）
+      values.set(id, roundTo2Decimals(result));
     }
   }
 

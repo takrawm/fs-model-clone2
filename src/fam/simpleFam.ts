@@ -7,7 +7,6 @@ import type {
   AccountId,
   FormulaNode,
   NodeId,
-  Op,
   Period,
   PeriodId,
   RelativePeriodReference,
@@ -16,6 +15,7 @@ import type {
   ValueKeyString,
 } from "../model/types.ts";
 import { createPeriod } from "../utils/periodUtils.ts";
+import { roundTo2Decimals, roundToInteger } from "../utils/numberUtils.ts";
 import {
   getPreviousPeriodDifferenceForAccount,
   multiplyAccountBySign,
@@ -149,8 +149,21 @@ export class SimpleFAM {
       const result = evalTopo(this.nodeRegistry, [nodeId]);
       // Mapオブジェクトのgetメソッド
       const value = result.get(nodeId) ?? 0;
-      this.setValue(nextPeriod.id, accountId, value);
-      output[nextPeriod.id][accountId] = Math.round(value);
+
+      // 資産合計と負債・純資産合計のみ整数に丸める
+      // その他の科目は小数点第2位まで丸める
+      let roundedValue: number;
+      if (
+        accountId === "assets_total" ||
+        accountId === "equity_and_liabilities_total"
+      ) {
+        roundedValue = roundToInteger(value);
+      } else {
+        roundedValue = roundTo2Decimals(value);
+      }
+
+      this.setValue(nextPeriod.id, accountId, roundedValue);
+      output[nextPeriod.id][accountId] = roundedValue; // UI用にも丸めた値を渡す
       console.log(`    > ${accountId}@${nextPeriod.id} = ${value.toFixed(2)}`);
     }
 
@@ -190,9 +203,11 @@ export class SimpleFAM {
     // 登録済みの値を確認
     const registeredValue = this.values.get(valueKey);
     if (registeredValue != null) {
+      // 既存の値も小数点第2位に丸める（誤差の伝播を防ぐため）
+      const roundedValue = roundTo2Decimals(registeredValue);
       const nodeId = makeFF(
         this.nodeRegistry,
-        registeredValue,
+        roundedValue,
         `${accountId}@${periodId}[Registered]`
       );
       this.valueKeyToNodeId.set(valueKey, nodeId);
