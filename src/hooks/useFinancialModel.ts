@@ -1,4 +1,12 @@
-import { useState, useCallback, useEffect, useRef, useMemo } from "react";
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useRef,
+  useMemo,
+  createContext,
+  useContext,
+} from "react";
 import type { Column } from "react-data-grid";
 import { SimpleFAM } from "../fam/simpleFam";
 import { forecastRules } from "../data/forecastRules";
@@ -79,7 +87,28 @@ export type Row =
   | RatioRow
   | YearOverYearRow;
 
-export function useFinancialModel() {
+/**
+ * フックが提供する値の型
+ */
+export interface FinancialModelHook {
+  columns: Column<Row>[];
+  rows: Row[];
+  runCompute: () => void;
+  nextYearPeriodId: string | null;
+}
+
+/**
+ * 状態を共有するためのReact Context
+ */
+export const FinancialModelContext = createContext<
+  FinancialModelHook | undefined
+>(undefined);
+
+/**
+ * useFinancialModelのロジック本体
+ * Providerコンポーネントから使用される
+ */
+export function useFinancialModelStore(): FinancialModelHook {
   // Column<Row>[]は、Row型の行データを扱うColumnの配列
   // Column<Row>：TRowがRowに置き換えられたColumn型
   const [columns, setColumns] = useState<Column<Row>[]>([]);
@@ -538,4 +567,17 @@ export function useFinancialModel() {
   }, [displayPeriods]);
 
   return { columns, rows, runCompute, nextYearPeriodId };
+}
+
+/**
+ * 財務モデルの状態にアクセスするためのカスタムフック
+ */
+export function useFinancialModel(): FinancialModelHook {
+  const context = useContext(FinancialModelContext);
+  if (context === undefined) {
+    throw new Error(
+      "useFinancialModel must be used within a FinancialModelProvider"
+    );
+  }
+  return context;
 }

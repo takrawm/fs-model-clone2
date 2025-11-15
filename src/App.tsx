@@ -1,20 +1,31 @@
-import { useFinancialModel } from "./hooks/useFinancialModel";
-import { StatementTable } from "./components/StatementTable";
+import { Routes, Route, NavLink, Navigate } from "react-router-dom";
+import { lazy, Suspense } from "react";
 import "./App.css";
 
-function App() {
-  const { columns, rows, runCompute, nextYearPeriodId } = useFinancialModel();
+// ページコンポーネントを遅延読み込み
+const FSPage = lazy(() => import("./pages/FSPage"));
+const DCFPage = lazy(() => import("./pages/DCFPage"));
+const ConfigPage = lazy(() => import("./pages/ConfigPage"));
 
+function App() {
   return (
     <div className="app-container">
-      <h2>Simple Financial Model</h2>
-      <button onClick={runCompute}>
-        Compute Next Year {nextYearPeriodId ? `(${nextYearPeriodId})` : ""}
-      </button>
+      {/* 1. タブナビゲーション */}
+      <nav className="navigation-tabs">
+        <NavLink to="/config">Config</NavLink>
+        <NavLink to="/fs">FS</NavLink>
+        <NavLink to="/dcf">DCF</NavLink>
+      </nav>
 
-      <div className="grid-container">
-        {rows.length > 0 && <StatementTable columns={columns} rows={rows} />}
-      </div>
+      {/* 2. ページコンテンツ */}
+      <Suspense fallback={<div>Loading...</div>}>
+        <Routes>
+          <Route path="/" element={<Navigate replace to="/fs" />} />
+          <Route path="/config" element={<ConfigPage />} />
+          <Route path="/fs" element={<FSPage />} />
+          <Route path="/dcf" element={<DCFPage />} />
+        </Routes>
+      </Suspense>
     </div>
   );
 }

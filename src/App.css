@@ -71,3 +71,28 @@ button:disabled {
 .rdg {
   box-sizing: content-box;
 }
+
+/* ナビゲーションタブ */
+.navigation-tabs {
+  display: flex;
+  border-bottom: 2px solid #e0e0e0;
+  margin-bottom: 1.5rem;
+}
+
+.navigation-tabs a {
+  padding: 0.8rem 1.5rem;
+  text-decoration: none;
+  color: #646cff;
+  font-weight: 500;
+  border-bottom: 3px solid transparent;
+  transition: color 0.2s, border-bottom-color 0.2s;
+}
+
+.navigation-tabs a:hover {
+  color: #535bf2;
+}
+
+.navigation-tabs a.active {
+  color: #1c1f5a;
+  border-bottom-color: #1c1f5a;
+}
